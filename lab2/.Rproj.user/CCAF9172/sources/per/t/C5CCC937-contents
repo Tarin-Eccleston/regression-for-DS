@@ -1,0 +1,37 @@
+# Catheter Data
+
+catheter.df <- read.table("catheter.data", header = TRUE)
+
+catheter.fit <- lm(survived ~ size, data = catheter.df)
+summary(catheter.fit)
+plot(ca ~ ht, data = catheter.df, xlab = "Height (inches)", ylab = "Catheter Lenght (inches)")
+abline(coef(catheter.fit)[1], coef(catheter.fit)[2])
+
+____________________________________________________
+# Crab Data
+
+crabs.df <- read.table("crab.data", header = TRUE)
+plot(sats ~ weight, data = crabs.df)
+crabs.fit <- glm(sats ~ weight, data = crabs.df, family = "poisson")
+
+xx <- seq(0, 6, length.out = 100)
+yy <- predict(crabs.df, newdata = data.frame(weight = xx), type = "response")
+lines(xx, yy)
+
+____________________________________________________
+# Corenory heart disease, 
+# Binomial Distribution: Y = Binomial(n, p)
+# N = number of trials / different types of results
+# Bernoulli type Binomial: Because there is truly only 0 or 1
+
+chd.df <- read.table("chd.data", header = TRUE)
+plot(chd ~ age, data = chd.df)
+chd.df <= glm(
+  
+xx <- seq(10,80, l)
+
+# Questions: Out of the 12 chickens, how many would be infront of the coop?
+# A: Binomial. There's an upper limit. You can calculate proportion.
+# In R for binomial, setup success on first column, and failures on second column
+
+
