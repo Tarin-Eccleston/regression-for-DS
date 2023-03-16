@@ -2,8 +2,8 @@
 
 # Question 1(a): Why is a linear model more appropriate than other types of GLMs we’ve met in this course so far?
 # Variables which measure size such as width, length and height are typically normally
-# distributed when either any of them are the responce variable and the rest are explanatory variables
-# therefore it appropriate to assume that the responce distribution for the disc width as explained by the explanatory variables:
+# distributed when either any of them are the response variable and the rest are explanatory variables
+# therefore it appropriate to assume that the response distribution for the disc width as explained by the explanatory variables:
 # disc length, cranial width and sex is normally distributed.
 
 # Question 1(b): Create plots to investigate relationships between the variables in this data set. Briefly comment on the plots (2–3 sentences).

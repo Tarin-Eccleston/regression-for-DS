@@ -1,3 +1,5 @@
+# Parametric bootstrapping
+
 setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS/w2")
 
 # a bit of a throwback
@@ -15,7 +17,7 @@ lines(xx, yy)
 # Assuming model is true
 
 # Create new matrix, age from sample, and predicted likelihood of chd to the response
-cbind(chd.df$age, fitted(chd_fit))
+cbind(chd_df$age, fitted(chd_fit))
 
 # flipping "coin" for each person from age 20 -> 63
 n_people = nrow(chd_df)
@@ -26,7 +28,9 @@ par(mfrow = c(1, 2))
 plot(chd ~ age, data = chd_df, main = "Original")
 yy = predict(chd_fit, newdata = data.frame(age = xx), type = "response")
 lines(xx, yy)
-plot(new_chd ~ age, data = chd.df, main = "Simulated")
+plot(new_chd ~ age, data = chd_df, main = "Simulated")
+
+# fit binomial model
 new_fit = glm(new_chd ~ age, family = binomial("probit"), data = chd_df)
 yy = predict(new_fit, newdata = data.frame(age = xx), type = "response")
 lines(xx, yy)
@@ -41,8 +45,28 @@ for (i in 1:n_boots){
   fit_boot = glm(chd_boot ~ age, family = binomial(link = "probit"), data = chd_df)
   coef_boot[i, ] = coef(fit_boot)
   agep80_boot[i] = (0.84162 - coef(fit_boot)[1])/coef(fit_boot)[2]
+}
+  
+# Let's see how we did with the estimated coefficients, comparing them to theory
 
-summary(fit_boot)
-# Calculate standard dev from bootstrapping
-# Result is similar to that from the summary of the lm
+# SE from summary()
+summary(chd_fit)$coef[,2]
+# SE from the boostrap
 apply(coef_boot, 2, sd)
+## not sure why the standard errors are really far apart
+
+# estimate from the real data
+agep80_est = (0.84162 - coef(chd_fit)[1]/coef(chd_fit)[2])
+agep80_est
+# the standard error calculated by bootstrap
+agep80_se = sd(agep80_boot)
+
+# we can use standard theory (i.e assuming a normal sampling dist) to get a
+# confidence interval
+c(agep80_est - qnorm(0.975)*agep80_se, agep80_est + 1.96*agep80_se)
+
+hist(agep80_boot, breaks = 20)
+
+# there's a better way to do all of this which doesn't require us to assume the sampling 
+# distribution for the estimator (beta coefficients) is normal
+# the histogram shows that the data is slightly right-skewed

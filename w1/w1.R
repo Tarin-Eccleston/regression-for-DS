@@ -1,7 +1,4 @@
-# Here are three different examples of the most common regression types
-# Linear
-# Poisson
-# Binomial
+# Introduction to Linear, Poisson and Binomial models
 
 setwd("/Users/tarineccleston/Documents/Masters/STATS 762/Exercises/W1")
 
