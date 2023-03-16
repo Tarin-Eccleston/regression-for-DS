@@ -1,9 +1,9 @@
-# Parametric bootstrapping
+## Parametric bootstrapping
 
-setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS/w2")
+setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS/bootstrapping")
 
 # a bit of a throwback
-chd_df = read.table("chd.data", header = TRUE)
+chd_df = read.table("data/chd.data", header = TRUE)
 chd_fit = glm(chd ~ age, family = "binomial", data = chd_df)
 
 summary(chd_fit)
@@ -39,6 +39,7 @@ lines(xx, yy)
 # can run simulations instead of calculating values using maths/theory
 n_boots = 10000
 coef_boot = matrix(0, nrow = n_boots, ncol = 2)
+# vector to store estimates of the age at which the chance of having CHD is 80%
 agep80_boot = numeric(n_boots)
 for (i in 1:n_boots){
   chd_boot = rbinom(n_people, 1, predict(chd_fit, type = "response"))
@@ -70,3 +71,48 @@ hist(agep80_boot, breaks = 20)
 # there's a better way to do all of this which doesn't require us to assume the sampling 
 # distribution for the estimator (beta coefficients) is normal
 # the histogram shows that the data is slightly right-skewed
+
+# easier way to get confidence intervals
+# confidence interval for Beta0
+quantile(coef_boot[, 1], probs = c(0.025, 0.975))
+# confidence interval for Beta1
+quantile(coef_boot[, 1], probs = c(0.025, 0.975))
+# confidence interval for the age at which CHD prob is 80% is...
+quantile(coef_boot[, 1], probs = c(0.025, 0.975))
+
+# normal Q-Q plots can be used to visualize data skew. if the slope is straight
+# then the data is not skewed
+
+## Non-parametric Bootstrapping
+
+# the difference between parametric and non-parametric is we resample from
+# the original data set
+
+# sample random numbers from 0 - 100, corresponding to the data rows in the 
+# original data set
+
+# for one iteration...
+# s = sample(n_people, replace = TRUE)
+# chd_df_np_boot = chd_df[s,]
+
+n_np_boots = 10000
+
+coef_np_boots = matrix(0, nrow = n_boots, ncol = 2)
+agep80_np_boot = numeric(n_boots)
+
+# for 10000 iterations
+for (i in 1:n_np_boots) {
+  # only difference between non-parametric and parametric is this line of code
+  chd_df_np_boot = chd_df[sample(n_people, replace = TRUE),]
+
+  fit_np_boot = glm(chd ~ age, family = binomial(link = "probit"), data = chd_df_np_boot)
+  coef_np_boots[i,] = coef(fit_np_boot)
+  agep80_np_boot = (0.84162 - coef(fit_np_boot)[1]/coef(fit_np_boot)[2])
+}
+
+# compare standard deviations
+# the standard deviations between parametric and non-parametric bootstrapping
+# are quite similar. The SD is a measure of how much variance there is for beta
+# values in the simulated data
+apply(coef_np_boots, 2, sd)
+apply(coef_boot, 2, sd)
