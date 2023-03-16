@@ -1,13 +1,13 @@
-setwd("/Users/tarineccleston/Documents/Masters/STATS 762/Exercises/W2")
+setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS/w2")
 
-# A bit of a throwback
-chd.df <- read.table("chd.data", header = TRUE)
-chd.fit <- glm(chd ~ age, family = "binomial", data = chd.df)
+# a bit of a throwback
+chd_df = read.table("chd.data", header = TRUE)
+chd_fit = glm(chd ~ age, family = "binomial", data = chd_df)
 
-summary(chd.fit)
-plot(chd ~ age, data = chd.df)
-xx <- seq(10, 80, length.out = 1000)
-yy <- predict(chd.fit, newdata = data.frame(age = xx), type = "response")
+summary(chd_fit)
+plot(chd ~ age, data = chd_df)
+xx = seq(10, 80, length.out = 1000)
+yy = predict(chd_fit, newdata = data.frame(age = xx), type = "response")
 lines(xx, yy)
   
 # How do we estimate the age which you are 80% likely to get CHD?
@@ -15,36 +15,34 @@ lines(xx, yy)
 # Assuming model is true
 
 # Create new matrix, age from sample, and predicted likelihood of chd to the response
-cbind(chd.df$age, fitted(chd.fit))
+cbind(chd.df$age, fitted(chd_fit))
 
-# Flipping "coin" for each person from age 20 -> 63
-n.people <- nrow(chd.df)
-new.chd <- rbinom(n.people, 1, predict(chd.fit, type = "response"))
+# flipping "coin" for each person from age 20 -> 63
+n_people = nrow(chd_df)
+new_chd = rbinom(n_people, 1, predict(chd_fit, type = "response"))
 
-# Comparison between real and simulated responce
+# comparison between real and simulated responce
 par(mfrow = c(1, 2))
-plot(chd ~ age, data = chd.df, main = "Original")
-yy <- predict(chd.fit, newdata = data.frame(age = xx), type = "response")
+plot(chd ~ age, data = chd_df, main = "Original")
+yy = predict(chd_fit, newdata = data.frame(age = xx), type = "response")
 lines(xx, yy)
-plot(new.chd ~ age, data = chd.df, main = "Simulated")
-new.fit <- glm(new.chd ~ age, family = binomial("probit"), data = chd.df)
-yy <- predict(new.fit, newdata = data.frame(age = xx), type = "response")
+plot(new_chd ~ age, data = chd.df, main = "Simulated")
+new_fit = glm(new_chd ~ age, family = binomial("probit"), data = chd_df)
+yy = predict(new_fit, newdata = data.frame(age = xx), type = "response")
 lines(xx, yy)
 
-# Create multiple simulations to calculate estimates for int and co-eff, and then calculate SE, SD
-# Can run simulations instead of calculating values using maths/theory
-n.boots <- 10000
-coef.boot <- matrix(0, nrow = n.boots, ncol = 2)
-agep80.boot <- numeric(n.boots)
-for (i in 1:n.boots){
-  chd.boot <- rbinom(n.people, 1, predict(chd.fit, type = "response"))
-  fit.boot <- glm(chd.boot ~ age, family = binomial(link = "probit"), data = chd.df)
-  coef.boot[i, ] <- coef(fit.boot)
-  agep80.boot[i] <- (0.84162 - coef(fit.boot)[1])/coef(fit.boot)[2]
-}
+# create multiple simulations to calculate estimates for int and co-eff, and then calculate SE, SD
+# can run simulations instead of calculating values using maths/theory
+n_boots = 10000
+coef_boot = matrix(0, nrow = n_boots, ncol = 2)
+agep80_boot = numeric(n_boots)
+for (i in 1:n_boots){
+  chd_boot = rbinom(n_people, 1, predict(chd_fit, type = "response"))
+  fit_boot = glm(chd_boot ~ age, family = binomial(link = "probit"), data = chd_df)
+  coef_boot[i, ] = coef(fit_boot)
+  agep80_boot[i] = (0.84162 - coef(fit_boot)[1])/coef(fit_boot)[2]
 
-summary(fit.boot)
+summary(fit_boot)
 # Calculate standard dev from bootstrapping
 # Result is similar to that from the summary of the lm
-apply(coef.boot, 2, sd)
-
+apply(coef_boot, 2, sd)
