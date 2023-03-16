@@ -1,3 +1,20 @@
+### Bootstrapping
+
+# Bootstrapping is especially useful in cases where
+#   - It is difficult or impossible to obtain a sampling dist based on theory
+#   - The assumptions required to obtain a theoretical sampling dist are in doubt
+
+# Note: 
+
+# The bootstrap is NOT used to get a better estimate of a statistic - the
+# expected value of the boostrap estimate is equal to the sample estimate
+
+# The data must be independent and representive of the population
+
+# Does not compensate for the model misspecification
+
+# ______________________________________________________________________________
+
 ## Parametric bootstrapping
 
 setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS/bootstrapping")
@@ -83,10 +100,13 @@ quantile(coef_boot[, 1], probs = c(0.025, 0.975))
 # normal Q-Q plots can be used to visualize data skew. if the slope is straight
 # then the data is not skewed
 
+# ______________________________________________________________________________
+
 ## Non-parametric Bootstrapping
 
 # the difference between parametric and non-parametric is we resample from
 # the original data set
+# mimics sampling from the population
 
 # sample random numbers from 0 - 100, corresponding to the data rows in the 
 # original data set
@@ -116,3 +136,6 @@ for (i in 1:n_np_boots) {
 # values in the simulated data
 apply(coef_np_boots, 2, sd)
 apply(coef_boot, 2, sd)
+
+# Notes: non-parametric bootstrapping is gold standard as you are not relying 
+# on the accuracy of your model to simulate new data
