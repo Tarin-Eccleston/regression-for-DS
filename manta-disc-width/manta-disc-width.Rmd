@@ -1,13 +1,13 @@
 # Assignment 1: Manta Disk Length
 
-# Question 1(a): Why is a linear model more appropriate than other types of GLMs we’ve met in this course so far?
-# Variables which measure size such as width, length and height are typically normally
-# distributed when either any of them are the response variable and the rest are explanatory variables
-# therefore it appropriate to assume that the response distribution for the disc width as explained by the explanatory variables:
-# disc length, cranial width and sex is normally distributed.
+### Question 1(a): Why is a linear model more appropriate than other types of GLMs we’ve met in this course so far?
 
-# Question 1(b): Create plots to investigate relationships between the variables in this data set. Briefly comment on the plots (2–3 sentences).
+Variables which measure size such as width, length and height are typically normally
+distributed when either any of them are the response variable and the rest are explanatory variables therefore it appropriate to assume that the response distribution for the disc width as explained by the explanatory variables: disc length, cranial width and sex is normally distributed.
 
+### Question 1(b): Create plots to investigate relationships between the variables in this data set. Briefly comment on the plots (2–3 sentences).
+
+```{r}
 setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS/manta-disc-width")
 library(tidyverse)
 library(ggplot2)
@@ -25,35 +25,50 @@ summary(manta_fit)
 
 # plotting data, best to use pairs plot as this shows the relationships between each
 # variable
-pairs(manta_df, xlab())
+pairs(manta_df)
+```
 
-# - Clear linear relationship between disc length and disc width, disc length
-# and cranial width, and disc width and cranial width
-# - Greater variance of size for female manta rays compared to males if you compare
-# the spread in the CW vs sex plot for example
-# - Male manta rays appear to be smaller than female manta rays
+- Clear linear relationship between disc length and disc width, disc length and 
+cranial width, and disc width and cranial width
+- Greater variance of size for female manta rays compared to males if you compare 
+the spread in the CW vs sex plot for example
+- Male manta rays appear to be smaller than female manta rays
 
-# Question 1(c): Create the model’s design matrix. Only print out the first six rows.
+### Question 1(c): Create the model’s design matrix. Only print out the first six rows.
 
+```{r}
 # append a column of 1s at the beginning for the intercept. remove the response variable (disc width)
 # make sure X and Y are in matrix form for the calculation
 X = as.matrix(cbind(1, manta_df[,-2]))
+head(X)
+```
 
-# Question 1(d): Calculate βb, the vector of estimated coefficients.
+### Question 1(d): Calculate βb, the vector of estimated coefficients.
+
+```{r}
 # Calculate βb by using: betahat = (Xt*X)^-1 *Xt*Y
 # Where X is the design matrix, and Y is the response variable matrix
 
 Y = as.matrix(manta_df[,2])
 # calculation
 beta_hat = solve(t(X) %*% X) %*% t(X) %*% Y
+colnames(beta_hat) = c("beta_hat")
+beta_hat
+```
 
-# Question 1(e): Calculate μb, the vector of estimated expected values (or “fitted values”). Only print out the first six values.
+### Question 1(e): Calculate μb, the vector of estimated expected values (or “fitted values”). Only print out the first six values.
+
+```{r}
 # calculate μb using: mew = X*betahat
 
 mew = X %*% beta_hat
+colnames(mew) = c("mew")
 head(mew)
+```
 
-# Question 1(f): Calculate σb, the estimated error variance.
+### Question 1(f): Calculate σb, the estimated error variance.
+
+```{r}
 # calculate σb using: σb^2 = RSS / (n - k - 1)
 # where RSS = THETAsum (yi - f(xi))^2
 
@@ -66,26 +81,40 @@ for (i in 1:nrow(X)) {
 }
 
 var_hat_sq = RSS/(nrow(X) - ncol(X))
+var_hat_sq
+```
 
-# Question 1(g): Calculate standard errors for the estimated coefficients.
 
+### Question 1(g): Calculate standard errors for the estimated coefficients.
+
+```{r}
 cov = var_hat_sq*solve(t(X)%*%X)
 std_err = sqrt(diag(cov))
+std_err
+```
 
-# Question 1(h): Calculate t-test statistics and p-values to test individual null hypotheses that the coefficients are equal to zero.
+### Question 1(h): Calculate t-test statistics and p-values to test individual null hypotheses that the coefficients are equal to zero.
 
+```{r}
 t_stat = beta_hat/std_err
 colnames(t_stat) = c("t-stat")
+t_stat
 p_value = 2*(1-pt(t_stat, 20))
 colnames(p_value) = c("p-value")
+p_value
+```
 
-# Question 1(i): Calculate confidence intervals for the coefficients.
+### Question 1(i): Calculate confidence intervals for the coefficients.
 
-beta_CI = cbind(std_err - qt(0.975, df = 20)*SE, beta_hat + qt(0.975, df = 20)*std_err)
+```{r}
+beta_CI = cbind(std_err - qt(0.975, df = 20)*std_err, beta_hat + qt(0.975, df = 20)*std_err)
 colnames(beta_CI) = c("2.5%", "97.5%")
+beta_CI
+```
 
-# Question 1(j): Calculate point predictions (equivalent to estimated expectations) for Morag’s and Evelyn’s disc widths.
+### Question 1(j): Calculate point predictions (equivalent to estimated expectations) for Morag’s and Evelyn’s disc widths.
 
+```{r}
 # Morag: a female manta ray with a disc length of 1.3 m and a cranial width of 0.75 m.
 # Evelyn: a female manta ray with a disc length of 1.625 m and a cranial width of 0.9375 m.
 
@@ -93,22 +122,31 @@ colnames(beta_CI) = c("2.5%", "97.5%")
 X_pred = cbind(c(1, 1), c(1.3, 1.625), c(0.75, 0.9375), c(0, 0))
 rownames(X_pred) =  c("Evelyn", "Morag")
 colnames(X_pred) = c("1", "DL", "CW", "sex")
+X_pred
 
 # getting prediction
 Y_pred = X_pred %*% beta_hat
 rownames(Y_pred) =  c("Evelyn", "Morag")
 colnames(Y_pred) = c("DW")
+Y_pred
+```
 
-# Question 1(k): Calculate confidence intervals for Morag’s and Evelyn’s expected disc widths.
-# calculate prediction variance and standard errors from new design matrix
+### Question 1(k): Calculate confidence intervals for Morag’s and Evelyn’s expected disc widths.
 
+Calculate prediction variance and standard errors from new design matrix
+
+```{r}
 pred_var = as.matrix(diag(X_pred %*% cov %*% t(X_pred)))
 pred_SE = sqrt(pred_var)
 
 pred_CI = cbind(Y_pred - qt(0.975, df = 20)*pred_SE, Y_pred + qt(0.975, df = 20)*pred_SE)
 colnames(pred_CI) = c("2.5%", "97.5%")
+pred_CI
+```
 
-# Question 1(l) Calculate prediction intervals for Morag’s and Evelyn’s observed disc widths.
+### Question 1(l) Calculate prediction intervals for Morag’s and Evelyn’s observed disc widths.
+
+```{r}
 # a prediction interval captures the uncertainty around a single value. 
 # a confidence interval captures the uncertainty around the mean predicted values
 
@@ -118,9 +156,12 @@ comb_SE = sqrt(comb_var)
 
 pred_PI = cbind(Y_pred - qt(0.975, df = 20)*comb_SE, Y_pred + qt(0.975, df = 20)*comb_SE)
 colnames(pred_PI) = c("2.5%", "97.5%")
+pred_PI
+```
 
-# Question 1(m) Bonus question! Write your own R function that accepts the arguments
+### Question 1(m) Bonus question! Write your own R function that accepts the arguments
 
+```{r}
 # Function Description: Basically does the same as the R summary() function
 # input: 
 #        Y, a vector of observations
@@ -164,11 +205,11 @@ summary_custom <- function(X, Y) {
   
   return(beta_hat, std_err, t_stat, p_value)
 }
+```
 
-# Question 2(a) Under the model from Question 1, what is the estimated ratio of 
-# Evelyn’s expected disc width to Morag’s expected disc width?
+### Question 2(a) Under the model from Question 1, what is the estimated ratio of Evelyn’s expected disc width to Morag’s expected disc width?
 
-DW_ratio =  (Y_pred[2] / Y_pred[1] - 1) * 100
-# the estimated ratio of Evelyn’s expected disc width to Morag’s expected disc width is ___
-
-# Question 2(b) Compute a confidence interval for this ratio.
+```{r}
+DW_ratio =  round((Y_pred[2] / Y_pred[1] - 1) * 100, digits = 3)
+DW_ratio
+```
