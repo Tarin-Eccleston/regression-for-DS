@@ -1,12 +1,12 @@
 # Introduction to Linear, Poisson and Binomial models
 
-setwd("/Users/tarineccleston/Documents/Masters/STATS 762/Exercises/W1")
+setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS/linear-models")
 
 ## Catheter Length
 # Dealing with continuous data (can only be positive)
 # Constant variance
 
-catheter.df <- read.table("catheter.data", header = TRUE)
+catheter.df <- read.table("data/catheter.data", header = TRUE)
 
 # Fit a linear model.
 catheter.fit <- lm(ca ~ ht, data = catheter.df)
@@ -18,11 +18,12 @@ summary(catheter.fit)
 plot(ca ~ ht, data = catheter.df, xlab = "Height (inches)", ylab = "Catheter Lenght (inches)")
 abline(coef(catheter.fit)[1], coef(catheter.fit)[2])
 
-____________________________________________________
+# ____________________________________________________
 ## Crabs
 # "sats": number of male crabs concentrating around the female crab (number of satellite male crabs).
 # Dealing with count data (integer values and positive)
 # Variance and expected satellite males increases as female body size increase
+# Variance = Mean (response)
 # Therefore use Poisson distribution
 # Variance = mean for Poisson distribution. High expectation = high variance and vise verso
 
@@ -45,7 +46,7 @@ yy <- predict(crabs.logfit, newdata = data.frame(weight = xx), type = 'response'
 plot(sats ~ weight, data = crabs.df)
 lines(yy ~ xx)
 
-____________________________________________________
+# ____________________________________________________
 ## Corenory heart disease, 
 # Binomial Distribution: Y = Binomial(n, p)
 # N = number of trials / different types of results
@@ -63,7 +64,7 @@ lines(xx, yy)
 # Questions: Out of the 12 chickens, how many would be infront of the coop?
 # A: Binomial. There's an upper limit. You can calculate proportion.
 # In R for binomial, setup success on first column, and failures on second column
-____________________________________________________
+# ____________________________________________________
 ## Chickens (Extra)
 # The lecturer has 12 chickens, and he wants predicts how many of them are in the yard at a given time.
 # We should use binomial regression, because there is a upper bound. The crab example doesn't have a upper bound (can be infinity).
@@ -71,6 +72,40 @@ ____________________________________________________
 n.chickens <- cbind(rbinom(8, 12, 0.4))
 # Success on first col, failures on second col
 chicken <- cbind(n.chickens, 12 - n.chickens)
+
+# ____________________________________________________
+
+# Maximum Likelihood Estimation vs RSS
+# ____________________
+# For GLMs, the estimated coefficients for the model are usually based on maximum
+# likelyhood (ML) estimation. Not RSS
+# this is because in a normal regression, the variance is constant, where the 
+# variance is not constant in a poisson regression
+# Don't need to get into depth with this topic
+
+# Common Approach to getting ML
+#   - Basically take partial diff of the ML equation and set to 0 to solve
+
+# For ordinary regression, taking a partial diff, results in. a set of linear equations
+# beta_hat = solve(t(X) %*% X) %*% t(X) %*% Y
+
+# BUT for GLMs, we use IRLS algorithm which converges to a correct solution and quickly
+# this is used in the glm() function in R
+
+# Coefficients
+# ____________________
+# normal regression coefficients assume a normal distribution
+# glm coefficients do not completely follow the normal distribution as you need
+# an asymptotically large sample from the population to get a normal result
+
+# Assessing Fit for GLM
+# ____________________
+# for GLM, deviance is the basic measure of how well a model fits the data
+# for normal regression, we use RSS
+# more scatering around the line = more deviance
+
+# Refer to notes
+
 
 
 
