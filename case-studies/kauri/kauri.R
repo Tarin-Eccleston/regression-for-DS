@@ -2,7 +2,7 @@
 setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS/case-studies/kauri")
 
 # Q1
-kauri.df <- read.csv("kauri.csv", header = TRUE)
+kauri.df <- read.csv("data/kauri.csv", header = TRUE)
 plot(presence ~ altitude, data = kauri.df, xlab = "Altitude (m)", ylab = "Presence (Yes/No)")
 
 # Q2

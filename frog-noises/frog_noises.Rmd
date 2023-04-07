@@ -1,0 +1,69 @@
+# STATS 762: Assignment 2
+## Author: Tarin Eccleston
+
+### Q1a)
+
+```{r}
+setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS/frog-noises")
+library(tidyverse)
+frog_df = read.csv("data/frogs.csv")
+
+# find the absolute distance between the frog and each microphone
+frog_df$dist = sqrt((abs(frog_df$mic.x - frog_df$animal.x)^2) + (abs(frog_df$mic.y - frog_df$animal.y)^2))
+# get the probability of that particular microphone detected that particular frog
+# based on the number of calls the frog makes and the detected amount from the mic
+frog_df$prob = frog_df$detected / frog_df$n.calls
+
+
+
+# fit model
+frog_fit <- glm(cbind(detected, n.calls - detected) ~ dist, family = "binomial", data = frog_df)
+
+summary(frog_fit)
+xx <- seq(min(frog_df$dist), max(frog_df$dist), length.out = 1000)
+yy <- predict(frog_fit, newdata = data.frame(dist = xx), type = "response")
+
+{plot(prob ~ dist, main = "Distance of Frog from Mic vs Probability of Noise Detection", xlab = "Distance of Frog from Mic (m)", ylab = "Probability of Noise Detection", data = frog_df)   
+lines(xx, yy)}
+```
+
+### Q1b)
+
+Looking at the data, it appears that the technical mishaps appear to be for some observations of frog noises recorded 0 - 4 meters away from the frog, where the probability of the call detection of the frogs is 0. This is unusual in comparison to other similar distance values in the data as those observations have a probability of detecting calls close to 1. We will do further analysis on this...
+
+
+```{r}
+# plot Cook's Distance, std. pearson residual plot vs leverage plot to see high leverage and influential observations
+{plot(frog_fit, which=4)
+plot(frog_fit, which=5)}
+```
+
+As shown from the Cook's distance plot, observations 24, 157, and 143 appear to be influential. As shown in the Residuals vs Leverage plot, observations 24, 157, and 143 are located approximately on the bottom right hand corner. These points appear to be both moderately leveraged and outlier observations making them influential points.
+
+Let's take a look at which mic these observations were taken from
+
+```{r}
+mic_obs_24 = frog_df[24,]$mic.id 
+mic_obs_143 = frog_df[143,]$mic.id 
+mic_obs_157 = frog_df[157,]$mic.id
+
+influential_mic_obs = cbind(mic_obs_24, mic_obs_143, mic_obs_157)
+rownames(influential_mic_obs) = 'mic.id'
+influential_mic_obs
+```
+
+All influential observations appear to come from mic 3. Let's look at all observations 
+from mic 3
+
+```{r}
+mic_3 = frog_df %>%
+  filter(mic.id == 3)
+mic_3
+```
+
+Mic 3 fails to detect all frog calls for a range of distances from the mic to the frog
+This is unexpected, as other mics are able to pickup calls when the frog is close to the the mic. We can assume that observations from mic 3 are untrustworthy as the mic is 
+faulty or didn't record properly.
+
+### Q2a)
+
