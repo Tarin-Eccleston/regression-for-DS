@@ -1,0 +1,208 @@
+---
+title: "STATS 762 - Slides demo"
+output: html_document
+---
+
+
+## Quantile regression
+
+First I loaded packages.
+```{r}
+library(quantreg)
+library(pscl)
+```
+
+### Engel food data
+
+Find quantile regressions for q=(0.05, ..., 0.95).
+```{r}
+data(engel)
+T=c(0.05,0.1,0.25,0.5,0.75,0.9,0.95)
+plot(foodexp ~ income, data = engel, main = "foodexp ~ income"
+                ,ylab="Food Expenditure",xlab='Household Income')
+abline(lm(foodexp ~ income, data = engel), col = 1); 
+
+for(t in 1:length(T)){
+  abline(rq(foodexp ~ income, data = engel,tau=T[t]), col = t+1)
+}
+legend("topright", legend = c("lm", paste("rq,",as.character(T))), col = c(1:(length(T)+1)),lty = 1)
+
+```
+
+Create table of intercept and coefficient estimates. (Slide 15)
+```{r}
+T=c(0.05,0.1,0.25,0.5,0.75,0.9,0.95)
+S0=S1=matrix(,length(T),3)
+for(t in 1:length(T)){
+  S0[t,]=summary(rq(foodexp ~ income, data = engel,tau=T[t]))$coefficients[1,]
+  S1[t,]=summary(rq(foodexp ~ income, data = engel,tau=T[t]))$coefficients[2,]
+}
+
+par(mfrow = c(1, 2)) 
+plot(T,S0[,1],type='l',ylim=c(min(S0),max(S0)),xlab='quantiles',ylab='intercept',
+     cex.axis=1.5,cex=1.5,cex.lab=1.5); 
+lines(T,S0[,2],col='blue'); lines(T,S0[,3],col='blue')
+plot(T,S1[,1],type='l',ylim=c(min(S1),max(S1)),xlab='quantiles',ylab='coefficient',
+     cex.axis=1.5,cex=1.5,cex.lab=1.5); 
+lines(T,S1[,2],col='blue'); lines(T,S1[,3],col='blue')
+
+```
+
+```{r}
+rqfit <- rq(foodexp ~ income, data = engel,tau=0.9)
+predict(rqfit,data.frame(income=1520),interval='confidence')
+
+rqfit$coefficients[1]+rqfit$coefficients[2]*1520
+
+```
+
+### Weight-height data
+
+```{r}
+hw.df <- read.csv('weightheight.csv',header=TRUE)
+plot(Weight ~ Height, data = hw.df, pch = substr(Gender, 1, 1), cex = 0.7,col = ifelse(Gender == "Male", "blue", "red"))
+```
+
+```{r}
+hw.fit1 <- lm(Weight ~ Height*Gender, data = hw.df)
+AIC(hw.fit1)
+hw.fit2 <- lm(Weight ~ Height+Gender, data = hw.df)
+AIC(hw.fit2)
+hw.fit3 <- lm(Weight ~ Height, data = hw.df)
+AIC(hw.fit3)
+hw.fit4 <- lm(Weight ~ Gender, data = hw.df)
+AIC(hw.fit4)
+```
+The 2nd model is chosen using AIC.
+
+```{r}
+summary(hw.fit2)
+par(mfrow = c(2, 2)); plot(hw.fit2)
+```
+
+Average weights are predicted for male and female students.
+
+```{r}
+male <- data.frame(Height=seq(from=54,to=79,length.out=100),Gender='Male')
+female <- data.frame(Height=seq(from=54,to=79,length.out=100),Gender='Female')
+pred.male=predict(hw.fit2,male,interval = "confidence")
+pred.female=predict(hw.fit2,female,interval = "confidence")
+
+#changing the base line
+hw.df$Gender <- factor(hw.df$Gender,levels=c("Male","Female"))
+summary(lm(Weight ~ Height+Gender, data = hw.df))
+
+plot(male$Height,pred.male[,1],type='l',ylim=c(80,250),ylab='Weight',xlab='Height');
+lines(male$Height,pred.male[,2],lty=3);lines(male$Height,pred.male[,3],lty=3);
+lines(female$Height,pred.female[,2],col=2);
+lines(female$Height,pred.female[,2],lty=3,col=2);lines(female$Height,pred.female[,3],lty=3,col=2);
+legend("topleft",c('Male','Female'),lty=c(1,1),col=c(1,2));
+text(60,180,'Weight(Male) = -241.74 + 6.20*Height')
+text(70,130,'Weight(Female) = -259.73 + 6.20*Height')
+```
+
+Quantiles of weights are predicted using quantile regressions.
+
+```{r}
+ql10 <- rq(Weight ~ Height+Gender, data = hw.df, tau=0.1)
+summary(ql10)
+ql90 <- rq(Weight ~ Height+Gender, data = hw.df, tau=0.9)
+summary(ql90)
+
+q10.pred.male=predict(ql10,male)
+q10.pred.female=predict(ql10,female)
+q90.pred.male=predict(ql90,male)
+q90.pred.female=predict(ql90,female)
+
+plot(male$Height,pred.male[,1],type='l',ylim=c(80,250),ylab='Weight',xlab='Height',main='Male students');
+lines(male$Height,q10.pred.male,lty=3);lines(male$Height,q90.pred.male,lty=3,col=4);
+text(70,130,'Weight(10%) = -239.55 + 5.98*Height')
+text(60,180,'Weight(90%) = -215.93 + 6.04*Height')
+legend("topleft",c('10%','90%'),lty=c(3,3),col=c(1,4));
+
+plot(female$Height,pred.female[,1],type='l',ylim=c(80,250),ylab='Weight',xlab='Height',main='Female students');
+lines(female$Height,q10.pred.female,lty=3);lines(female$Height,q90.pred.female,lty=3,col=4);
+legend("topleft",c('10%','90%'),lty=c(3,3),col=c(1,4));
+text(70,130,'Weight(10%) = -259.45 + 5.98*Height')
+text(60,180,'Weight(90%) = -236.11 + 6.04*Height')
+
+predict(ql10,data.frame(Height=c(70,70),Gender=c('Male','Female')),interval='confidence')
+
+predict(ql90,data.frame(Height=c(70,70),Gender=c('Male','Female')),interval='confidence')
+
+```
+
+## Zero-inflated count data
+
+Load the pscl-package and the fish caught data. 
+
+```{r}
+library(pscl)
+
+fish <- read.csv('fish.csv',header=TRUE)
+```
+
+Fish count is modelled by the Poisson density.
+
+```{r}
+f0 <- c(0:150) #vector of count values
+hist(fish$count,prob=TRUE,nclass=70,xlab='count'); lines(f0,dpois(f0,3.296))
+```
+### Zero-inflated Poisson regression 
+
+Fish count is modelled by the zero-inflated Poisson model.
+
+```{r}
+#zero-inflated poisson dist
+zinf1 <- zeroinfl(count~1,data=fish,dist='poisson')
+summary(zinf1)
+coef(zinf1)
+
+#Back transformation for a zero-inflation probability 
+p.zi = exp(coef(zinf1)[2])/(1+exp(coef(zinf1)[2])) 
+
+hist(fish$count,prob=TRUE,nclass=70,xlab='count'); lines(f0,p.zi*(f0==0)+(1-p.zi)*dpois(f0,coef(zinf1)[1]),col=2)
+
+#probability of zero catch 
+p.zi+(1-p.zi)*dpois(0,exp(coef(zinf1)[1]))
+
+```
+Fish count for a number of adults and child is modelled using a zero-inflated Poisson regression. Particularly 
+
+```{r}
+zinf2 <- zeroinfl(count~persons+child,data=fish,dist='poisson')
+```
+
+Predict a number of fish caught for a group of 1 adult and 2 children.
+```{r}
+#zero-inflated poisson dist
+exp(coef(zinf2)[4]+coef(zinf2)[5]*3+coef(zinf2)[6]*2)/(1+exp(coef(zinf2)[4]+coef(zinf2)[5]*3+coef(zinf2)[6]*2))
+
+predict(zinf2,data.frame(persons=3,child=2),type='zero')
+
+#expected non-zero value (mean for untruncated process)
+predict(zinf2,data.frame(persons=3,child=2),type='count')
+
+#expected value
+predict(zinf2,data.frame(persons=3,child=2),type='response')
+
+```
+
+### Hurdle model
+
+```{r}
+zinf3 <- hurdle(count~persons+child,data=fish,dist='poisson',link='logit')
+summary(zinf3)
+```
+Predict a number of fish caught for a group of 1 adult and 2 children.
+```{r}
+#mean parameter for untruncated process
+predict(zinf3,data.frame(persons=3,child=2),type='count')
+
+#expected value
+predict(zinf3,data.frame(persons=3,child=2),type='response')
+
+#ratio of non-zero term
+predict(zinf3,data.frame(persons=3,child=2),type='zero')
+
+```

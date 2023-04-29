@@ -60,7 +60,7 @@ coef_boot = matrix(0, nrow = n_boots, ncol = 2)
 agep80_boot = numeric(n_boots)
 for (i in 1:n_boots){
   chd_boot = rbinom(n_people, 1, predict(chd_fit, type = "response"))
-  fit_boot = glm(chd_boot ~ age, family = binomial(link = "probit"), data = chd_df)
+  fit_boot = glm(chd_boot ~ chd_df$age, family = binomial(link = "probit"))
   coef_boot[i, ] = coef(fit_boot)
   agep80_boot[i] = (0.84162 - coef(fit_boot)[1])/coef(fit_boot)[2]
 }
@@ -124,7 +124,6 @@ agep80_np_boot = numeric(n_boots)
 for (i in 1:n_np_boots) {
   # only difference between non-parametric and parametric is this line of code
   chd_df_np_boot = chd_df[sample(n_people, replace = TRUE),]
-
   fit_np_boot = glm(chd ~ age, family = binomial(link = "probit"), data = chd_df_np_boot)
   coef_np_boots[i,] = coef(fit_np_boot)
   agep80_np_boot = (0.84162 - coef(fit_np_boot)[1]/coef(fit_np_boot)[2])

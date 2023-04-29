@@ -81,7 +81,7 @@ colnames(p_value) = c("p-value")
 
 # Question 1(i): Calculate confidence intervals for the coefficients.
 
-beta_CI = cbind(std_err - qt(0.975, df = 20)*SE, beta_hat + qt(0.975, df = 20)*std_err)
+beta_CI = cbind(beta_hat - qt(0.975, df = 20)*std_err, beta_hat + qt(0.975, df = 20)*std_err)
 colnames(beta_CI) = c("2.5%", "97.5%")
 
 # Question 1(j): Calculate point predictions (equivalent to estimated expectations) for Morag’s and Evelyn’s disc widths.
