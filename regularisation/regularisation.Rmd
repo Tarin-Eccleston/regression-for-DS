@@ -1,0 +1,47 @@
+# STATS 765: Tutorial 8
+
+## Task 1) Compare performance using different variable selection techniques 
+
+```{r}
+setwd("/Users/tarineccleston/Documents/Masters/STATS 765/statistical-learning-for-DS/regularisation/")
+library(tidyverse)
+library(glmnet); #Ridge and Lasso  
+library(grpreg); #Group lasso
+train = read_csv("data/cancer0.csv")
+test = read_csv("data/cancer1.csv")
+train$Diagnosis <- as.numeric(train$Diagnosis=='M')
+test$Diagnosis <- as.numeric(test$Diagnosis=='M')
+
+train = as.matrix(train)
+test = as.matrix(test)
+
+str(train)
+```
+
+
+### AIC / BIC
+```{r}
+
+```
+
+
+### 
+
+### Ridge
+```{r}
+
+```
+
+### LASSO
+```{r}
+# model building
+binary_lasso_fit = cv.glmnet(train[,-1], train[,1], family = 'binomial', alpha = 1, standardize = TRUE)
+plot(binary_lasso_fit)
+```
+
+```{r}
+# using parsimonious
+binary_fit_par = glmnet(test[,-1], test[,1], family = 'binomial', alpha = 1, lambda = binary_lasso_fit$lambda.1se,  standardize = TRUE)
+binary_fit_par_mse = ((test[,1]-predict(binary_fit_par,test[,-1]))/nrow(test)
+```
+
