@@ -9,7 +9,7 @@ The spreadsheet SeoulBikeSpring.csv contains rented bike counts at each hour and
 ```{r}
 library(tidyverse)
 library(ggplot2)
-library(mgcv)
+library(glmnet)
 
 setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS/seoul-bike-spring")
 
@@ -18,7 +18,7 @@ next_day_df = as.data.frame(read.csv("data/nextday.csv"))
 ```
 
 
-# 1a) Why snowfall is not useful in modelling rented bike counts and there is no need to include snowfall in a model?
+#### 1a) Why snowfall is not useful in modelling rented bike counts and there is no need to include snowfall in a model?
 
 ```{r}
 ggplot(seoul_bike_df, aes(x = Snowfall)) +
@@ -29,7 +29,7 @@ ggplot(seoul_bike_df, aes(x = Snowfall)) +
 
 ALL 2136 observations in Spring record 0 cm of snowfall in that particular hour. In regression we are interested in changes of an explanatory variable and it's effect on the response variable. If the values of the snowfall are the same for all observations, then it would not be useful to model rented bike counts.
 
-# 1b) it an appropriate regression model using all covariates except snow-fall and, find the mean squared error (MSE).
+#### 1b) it an appropriate regression model using all covariates except snow-fall and, find the mean squared error (MSE).
 
 ```{r}
 # remove snowfall
@@ -39,7 +39,7 @@ seoul_bike_df = subset(seoul_bike_df, select = -c(Snowfall))
 
 # fit poisson model as we are trying to count the number of rented bikes
 # include polynomial terms
-seoul_bike_fit = glm(Rented.Bike.Count ~ .^2, family = "poisson", data = seoul_bike_df)
+seoul_bike_fit = glm(Rented.Bike.Count ~ ., family = "poisson", data = seoul_bike_df)
 summary(seoul_bike_fit)
 ```
 ```{r}
@@ -53,5 +53,74 @@ y_hat = predict(seoul_bike_fit, newdata = X, type = "response")
 mse <- mean((y - y_hat)^2)
 mse
 ```
+
+#### 1c) Fit a parsimonious regression with l1 penalty. List covariates included in the parsimonious model and find the MSE.
+
+```{r}
+# use CV on a range of lambda values for lasso regression
+cv_lasso = cv.glmnet(as.matrix(seoul_bike_df[,-1]), as.matrix(seoul_bike_df[,1]), alpha=1, standardize=TRUE)
+plot(cv_lasso)
+```
+
+```{r}
+lamda_par = cv_lasso$lambda.1se
+lamda_par
+```
+
+```{r}
+coef(cv.lasso, s= cv_lasso$lambda.1se)
+```
+Since we use lasso regression, we get a mixture of shrinkage and sparsity of beta coefficients. Therefore we perform variable selection. The included covariates are: Hour, Temperature, Humidity, Visibility and Rainfall.
+
+```{r}
+y_hat_par = predict(cv.lasso, newx = as.matrix(X), s = lamda_par, type = "response")
+
+# Calculate the MSE for the predicted values
+mse_par <- mean((y - y_hat_par)^2)
+mse_par
+```
+
+#### 1d) Using your parsimonious model in (c), predict rented bike counts
+on the next day (nextday.csv). List your prediction against actual
+counts on the next day and find at which hour, your prediction is the
+best.
+
+```{r}
+next_day_X = subset(next_day_df, select = -c(Rented.Bike.Count, Snowfall))
+next_day_y = next_day_df$Rented.Bike.Count
+  
+# use parsimonious model with l1 regularization
+next_day_y_hat = predict(cv.lasso, newx = as.matrix(next_day_X), s = lamda_par, type = "response")
+colnames(next_day_y_hat) = "next_day_y_hat"
+```
+
+```{r}
+# combine dataframes for plotting
+next_day_y = as.data.frame(next_day_y)
+next_day_y_hat = as.data.frame(next_day_y_hat)
+
+next_day_comparisons = next_day_y %>%
+  mutate(next_day_y_hat) %>%
+  mutate(Hour = next_day_X$Hour) %>%
+  relocate(Hour, .before = next_day_y)
+
+ggplot(next_day_comparisons, aes(x = Hour)) +
+  geom_area(aes(y = next_day_y, fill = "Actual Bike Rent Count"), alpha = 0.5) +
+  geom_area(aes(y = next_day_y_hat, fill = "Predicted Bike Rent Count"), alpha = 0.5) +
+  labs(x = "Hour", y = "Bike Rent Count", fill = "", color = "") +
+  ggtitle("Comparison between Actual and Predicted Bike Rent Counts") +
+  scale_fill_manual(name = "", values = c("Actual Bike Rent Count" = "grey", "Predicted Bike Rent Count" = "red")) +
+  scale_color_manual(name = "", values = c("Actual Bike Rent Count" = "black", "Predicted Bike Rent Count" = "black")) +
+  theme(legend.position = "bottom")
+```
+```{r}
+next_day_comparisons = next_day_comparisons %>%
+  mutate(error = abs(next_day_y - next_day_y_hat))
+
+most_accurate_hour = next_day_comparisons$Hour[which.min(next_day_comparisons$error)]
+most_accurate_hour
+```
+
+The predicted bike rent count appears to be most accurate at 10 am.
 
 
