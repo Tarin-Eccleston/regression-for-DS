@@ -1,0 +1,57 @@
+## STATS 762: Assignment 3
+### Author: Tarin Eccleston
+
+Rental bikes are introduced in many urban cities for the enhancement of mobility comfort. It is important to make the rental bike available and accessible to the public at the right time. In order to provide the city with a stable supply
+of rental bikes, a reliable model for rented bike counts at each hour and weather is required.
+
+The spreadsheet SeoulBikeSpring.csv contains rented bike counts at each hour and weather information in Seoul, Korea.
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(mgcv)
+
+setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS/seoul-bike-spring")
+
+seoul_bike_df = as.data.frame(read.csv("data/SeoulBikeSpring.csv"))
+next_day_df = as.data.frame(read.csv("data/nextday.csv"))
+```
+
+
+# 1a) Why snowfall is not useful in modelling rented bike counts and there is no need to include snowfall in a model?
+
+```{r}
+ggplot(seoul_bike_df, aes(x = Snowfall)) +
+  geom_histogram() +
+  labs(x = "Snowfall (cm)", y = "Frequency") +
+  xlim(-1, 10)
+```
+
+ALL 2136 observations in Spring record 0 cm of snowfall in that particular hour. In regression we are interested in changes of an explanatory variable and it's effect on the response variable. If the values of the snowfall are the same for all observations, then it would not be useful to model rented bike counts.
+
+# 1b) it an appropriate regression model using all covariates except snow-fall and, find the mean squared error (MSE).
+
+```{r}
+# remove snowfall
+seoul_bike_df = subset(seoul_bike_df, select = -c(Snowfall))
+
+# todo: probably some sort of data exploration to find the correct transformations?
+
+# fit poisson model as we are trying to count the number of rented bikes
+# include polynomial terms
+seoul_bike_fit = glm(Rented.Bike.Count ~ .^2, family = "poisson", data = seoul_bike_df)
+summary(seoul_bike_fit)
+```
+```{r}
+X = subset(seoul_bike_df, select = -c(Rented.Bike.Count))
+y = seoul_bike_df$Rented.Bike.Count
+
+# Use the fitted model to predict the response variable for the testing data
+y_hat = predict(seoul_bike_fit, newdata = X, type = "response")
+
+# Calculate the MSE for the predicted values
+mse <- mean((y - y_hat)^2)
+mse
+```
+
+
