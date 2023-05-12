@@ -1,0 +1,313 @@
+---
+title: "STATS 762 - Slides demo"
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Preparation
+
+First I loaded required packages and load datasets.
+
+```{r}
+library(MASS) 
+library(klaR)
+library(nnet)
+library(reshape2)
+library(ggplot2)
+library(e1071) 
+
+#Setup random numbers
+set.seed(1234)
+
+```
+
+# Logistic regression  - Low birth weight data
+
+```{r}
+#read the data and convert low as a nominal variable
+Birth=read.csv(file='Birthwt.csv',header=TRUE)
+
+#Fit a logistic regression 
+Birth.logistic <- glm(low ~ ., data = Birth,family='binomial')
+
+#predict class probability 
+bp <- predict(Birth.logistic,newdata=Birth,type='response') 
+
+#predict class
+bp.class <- as.numeric(bp>.5)
+
+#coefficient estimates 
+coef(Birth.logistic)
+
+#confusion matrix
+table(bp.class,Birth$low)
+
+#cross entropy
+-sum(dbinom(Birth$low,1,bp,log=TRUE))
+
+#alternatively...
+-sum(Birth$low*log(bp)+(1-Birth$low)*log(1-bp))
+
+```
+
+# Iris data example
+### Data preparation
+
+```{r}
+#read iris data
+iris=read.csv(file='iris.csv', header = TRUE)
+n=dim(iris)[1]
+
+#test.index is a list of indice of the test data
+test.index=c(21,5,10,32,40,27,37,24,44,15,70,95,67,73,90,61,94,71,77,78,128,122,136,138,141,135,118,148,132,144)
+
+```
+### Multinomial regression 
+
+```{r}
+#fit a multinomial regression for the train data
+iris.mn <- multinom(Species ~ ., data = iris[-test.index,])
+iris.mn
+
+#class membership probabilities
+prob=fitted(iris.mn)
+print(prob[1:5,])
+
+#class probability for the test data 
+prob.species <- predict(iris.mn,newdata=iris[test.index,],type='prob') 
+
+#class prediction for the test data 
+pre.species <- predict(iris.mn,newdata=iris[test.index,]) 
+
+#confusion matrix
+conf.mx <- table(pre.species,iris$Species[test.index])
+conf.mx
+```
+
+
+
+The measure.classification-function computes classification performance estimates (entropy,avg accuracy,error rate,precision,recall,F1-score). 
+```{r}
+measure.classification <- function(class.pred,prob.class,class.obs,conf.mx){
+  #class.pred=class prediction
+  #prob.class=predicted class probability
+  #conf.mx=confusion matrix; observed class in column and predict class in row 
+  #class.obs=class observation
+  entropy <- 0 
+  for(i in levels(class.pred)){
+  entropy = entropy-sum(log(prob.class[class.obs==i,colnames(prob.class)==i])) }
+  avg.accuracy=err.rate=0
+  for (i in 1:ncol(conf.mx)){
+    avg.accuracy <- avg.accuracy + (conf.mx[i,i]+sum(conf.mx[-i,-i]))/sum(conf.mx)
+  err.rate <- err.rate + (sum(conf.mx[i,-i])+sum(conf.mx[-i,i]))/sum(conf.mx)
+  }
+  avg.accuracy=avg.accuracy/i
+  err.rate=err.rate/i
+  precision <- mean(diag(conf.mx)/rowSums(conf.mx))
+  recall <- mean(diag(conf.mx)/colSums(conf.mx))
+  F1.score <- 2*precision*recall/(precision+recall)
+  return(list(entropy=entropy,avg.accuracy=avg.accuracy,err.rate=err.rate,precision=precision,recall=recall,F1.score=F1.score))
+}
+```
+
+Classification performance estimates.
+```{r}
+measure.classification(class.pred=pre.species,prob.class=prob.species,class.obs=iris$Species[test.index],conf.mx)
+  
+#cross entropy estimation
+entropy <- 0
+for(i in levels(pre.species)){
+  entropy = entropy-sum(log(prob.species[iris$Species[test.index]==i,colnames(prob.species)==i]))
+}
+entropy 
+```
+
+### LDA & QDA  
+
+```{r}
+#Fit the LDA for the train data
+lda.iris <- lda(Species ~ .,iris[-test.index,])
+
+# prior probabilities
+lda.iris$prior
+# group specific mean
+lda.iris$means
+
+
+#Plot boundaries
+partimat(as.factor(Species) ~ ., data=iris[-test.index,], method="lda")
+
+#prediction 
+lda.pred=predict(lda.iris,iris[test.index,])
+
+#print the class membership probability 
+lda.pred$posterior
+
+#confusion matrix
+lda.mx <- table(lda.pred$class,iris$Species[test.index])
+lda.mx
+
+```
+
+```{r}
+#Fit the QDA for the train data
+qda.iris <- qda(Species ~ .,iris[-test.index,])
+
+#plot boundaries
+partimat(as.factor(Species) ~ ., data=iris[-test.index,], method="qda")
+
+#prediction 
+qda.pred=predict(qda.iris,iris[test.index,])
+
+#class membership probability 
+qda.pred$posterior 
+
+#confusion matrix
+qda.mx <- table(qda.pred$class,iris$Species[test.index])
+qda.mx
+
+```
+### SVM  
+
+SVM for iris data
+```{r}
+iris.svm1 <- svm(as.factor(Species)~., data=iris[-test.index,], kernel='linear',probability=TRUE)
+plot(iris.svm1, iris[-test.index,], Petal.Width ~ Petal.Length, slice = list(Sepal.Width = 3, Sepal.Length = 4))
+
+svm1.pred <- predict(iris.svm1,iris[test.index,],probability=TRUE)
+svm1.mx <- table(iris$Species[test.index],svm1.pred)
+svm1.mx
+
+iris.svm2 <- svm(as.factor(Species)~., data=iris[-test.index,],probability=TRUE)
+plot(iris.svm2, iris[-test.index,], Petal.Width ~ Petal.Length, slice = list(Sepal.Width = 3, Sepal.Length = 4))
+
+svm2.pred.class <- predict(iris.svm2,iris[test.index,])
+svm2.pred <- predict(iris.svm2,iris[test.index,],probability=TRUE)
+svm2.pred.prob <- attr(svm2.pred, "probabilities")
+
+svm2.mx <- table(iris$Species[test.index],svm2.pred.class)
+svm2.mx
+
+measure.classification(class.pred=svm2.pred.class,prob.class=svm2.pred.prob,class.obs=iris$Species[test.index],svm2.mx)
+```
+
+Ring data is uploaded.
+
+```{r}
+rings <- read.csv('rings.csv',header=T)
+rings[,3] = as.factor(rings[,3])
+col.y=as.numeric(rings$y=='A')+2*as.numeric(rings$y=='B')+3*as.numeric(rings$y=='C'); 
+plot(rings$x1,rings$x2,col=col.y,xlab='x1',ylab='x2'); legend('bottomright',c("A","B","C"),pch=1,col=c(1:3))
+```
+SVM for the ring data
+
+```{r}
+rings.svm1 <- svm(y~., data=rings, kernel='linear')
+plot(rings.svm1, rings)
+table(rings$y,predict(rings.svm1,rings))
+
+rings.svm2 <- svm(y~., data=rings, kernel='polynomial')
+plot(rings.svm2, rings)
+table(rings$y,predict(rings.svm2,rings))
+
+rings.svm3 <- svm(y~., data=rings, kernel='radial')
+plot(rings.svm3, rings)
+table(rings$y,predict(rings.svm3,rings))
+
+rings.svm4 <- svm(y~., data=rings, kernel='sigmoid')
+plot(rings.svm4, rings)
+table(rings$y,predict(rings.svm4,rings))
+
+```
+
+# Glass data  
+```{r}
+#load the glass data
+glass=read.csv(file='glass.csv',header=TRUE);
+glass$Type=as.factor(glass$Type)
+```
+
+### Multinomial regression 
+```{r}
+#Fit the multinomial regression 
+glass.mn <- multinom(Type ~ ., glass)
+
+#Prediction 
+glass.mnpredict <- predict(glass.mn,glass)
+glass.mnpredict.prob <- predict(glass.mn,glass,type='prob') 
+
+#confusion matrix
+glass.mn.mx <- table(glass.mnpredict,glass$Type)
+glass.mn.mx
+
+measure.classification(class.pred=glass.mnpredict,prob.class=glass.mnpredict.prob,class.obs=glass$Type,glass.mn.mx)
+```
+
+###LDA
+```{r}
+#LDA
+glass.lda <- lda(Type~.,glass)
+
+#prediction 
+glass.ldapredict <- predict(glass.lda,glass)
+
+#confusion matrix
+glass.lda.mx <- table(glass.ldapredict$class,glass$Type)
+glass.lda.mx
+
+measure.classification(class.pred=glass.ldapredict$class,prob.class=glass.ldapredict$posterior,class.obs=glass$Type,glass.lda.mx)
+```
+
+If you fit the QDA naively, you will get an error message that the number of samples for Type=6 is too small.
+We exclude samples for Type=6 and fit the QDA.
+```{r}
+#glass.sub is the data excluding Type=6. 
+#reset the level. 
+glass.sub=glass[which(glass$Type!='6'),]; glass.sub$Type=factor(glass.sub$Type)
+
+#QDA
+glass.qda <- qda(Type~.,glass.sub)
+
+#Prediction 
+glass.qdapredict <- predict(glass.qda,glass.sub)
+
+#confusion matrix
+glass.qda.mx <- table(glass.qdapredict$class,glass.sub$Type)
+glass.qda.mx
+
+measure.classification(class.pred=glass.qdapredict$class,prob.class=glass.qdapredict$posterior,class.obs=glass.sub$Type,glass.qda.mx)
+```
+
+### SVM
+```{r}
+
+glass.svm <- svm(Type~., data=glass,probability = TRUE)
+glass.svm.pred <- predict(glass.svm,glass,probability = TRUE)
+glass.pred.prob <- attr(glass.svm.pred,"probabilities")
+glass.svm.pred.class <- predict(glass.svm,glass)
+
+glass.svm.mx <- table(glass.svm.pred.class,glass$Type)
+glass.svm.mx
+
+measure.classification(class.pred=glass.svm.pred.class,prob.class=glass.pred.prob,class.obs=glass$Type,glass.svm.mx)
+
+```
+
+### subset variables minimizing the AIC.
+The R-markdown is not excuting this part as it consumes pages. 
+```{r}
+#glass.aic=stepAIC(glass.mn,k=2,trace=FALSE)
+#glass.aic$anova
+
+#glass.mn.aic <- multinom(Type ~ Na+Mg+Al+Si+K+Ba, glass)
+
+##Prediction 
+#glass.mnpredict.aic <- predict(glass.mn.aic,glass)
+
+##confusion matrix
+#table(glass.mnpredict.aic,glass$Type)
+```

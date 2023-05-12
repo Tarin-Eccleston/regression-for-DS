@@ -1,0 +1,6 @@
+```{r}
+setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS/classification/")
+
+
+```
+
