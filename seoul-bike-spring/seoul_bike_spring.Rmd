@@ -1,6 +1,10 @@
 ## STATS 762: Assignment 3
 ### Author: Tarin Eccleston
 
+NOTES
+- Low mse, however high p-value could be due to multicol, or high variances compared to mean.
+- Need to standardardise the features...
+
 Rental bikes are introduced in many urban cities for the enhancement of mobility comfort. It is important to make the rental bike available and accessible to the public at the right time. In order to provide the city with a stable supply
 of rental bikes, a reliable model for rented bike counts at each hour and weather is required.
 
@@ -10,11 +14,15 @@ The spreadsheet SeoulBikeSpring.csv contains rented bike counts at each hour and
 library(tidyverse)
 library(ggplot2)
 library(glmnet)
+library(pscl)
+library(quantreg)
 
 setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS/seoul-bike-spring")
 
 seoul_bike_df = as.data.frame(read.csv("data/SeoulBikeSpring.csv"))
 next_day_df = as.data.frame(read.csv("data/nextday.csv"))
+
+set.seed(991)
 ```
 
 
@@ -35,7 +43,12 @@ ALL 2136 observations in Spring record 0 cm of snowfall in that particular hour.
 # remove snowfall
 seoul_bike_df = subset(seoul_bike_df, select = -c(Snowfall))
 
-# todo: probably some sort of data exploration to find the correct transformations?
+'''
+# train / test split
+sample_index = sample(nrow(seoul_bike_df), as.numeric(nrow(seoul_bike_df) * 0.8), replace = FALSE)
+seoul_bike_train_df = seoul_bike_df[sample_index,]
+seoul_bike_test_df = seoul_bike_df[-sample_index,]
+'''
 
 # fit poisson model as we are trying to count the number of rented bikes
 # include polynomial terms
@@ -43,14 +56,11 @@ seoul_bike_fit = glm(Rented.Bike.Count ~ ., family = "poisson", data = seoul_bik
 summary(seoul_bike_fit)
 ```
 ```{r}
-X = subset(seoul_bike_df, select = -c(Rented.Bike.Count))
-y = seoul_bike_df$Rented.Bike.Count
-
 # Use the fitted model to predict the response variable for the testing data
-y_hat = predict(seoul_bike_fit, newdata = X, type = "response")
+y_hat = predict(seoul_bike_fit, newdata = seoul_bike_df, type = "response")
 
 # Calculate the MSE for the predicted values
-mse <- mean((y - y_hat)^2)
+mse = mean((seoul_bike_df$Rented.Bike.Count - y_hat)^2)
 mse
 ```
 
@@ -68,15 +78,15 @@ lamda_par
 ```
 
 ```{r}
-coef(cv.lasso, s= cv_lasso$lambda.1se)
+coef(cv_lasso, s= cv_lasso$lambda.1se)
 ```
 Since we use lasso regression, we get a mixture of shrinkage and sparsity of beta coefficients. Therefore we perform variable selection. The included covariates are: Hour, Temperature, Humidity, Visibility and Rainfall.
 
 ```{r}
-y_hat_par = predict(cv.lasso, newx = as.matrix(X), s = lamda_par, type = "response")
+y_hat_par = predict(cv_lasso, newx = as.matrix(seoul_bike_df[,-1]), s = lamda_par, type = "response")
 
 # Calculate the MSE for the predicted values
-mse_par <- mean((y - y_hat_par)^2)
+mse_par <- mean((seoul_bike_df$Rented.Bike.Count - y_hat_par)^2)
 mse_par
 ```
 
@@ -86,22 +96,25 @@ counts on the next day and find at which hour, your prediction is the
 best.
 
 ```{r}
-next_day_X = subset(next_day_df, select = -c(Rented.Bike.Count, Snowfall))
-next_day_y = next_day_df$Rented.Bike.Count
+next_day_df = subset(next_day_df, select = -c(Snowfall))
   
 # use parsimonious model with l1 regularization
-next_day_y_hat = predict(cv.lasso, newx = as.matrix(next_day_X), s = lamda_par, type = "response")
+next_day_y_hat = predict(cv_lasso, newx = as.matrix(next_day_df[,-1]), s = lamda_par, type = "response")
 colnames(next_day_y_hat) = "next_day_y_hat"
+
+mse =  mean((next_day_df$Rented.Bike.Count - next_day_y_hat)^2)
+mse
 ```
 
 ```{r}
 # combine dataframes for plotting
-next_day_y = as.data.frame(next_day_y)
+next_day_y = as.data.frame(next_day_df$Rented.Bike.Count)
+colnames(next_day_y) = "next_day_y"
 next_day_y_hat = as.data.frame(next_day_y_hat)
 
 next_day_comparisons = next_day_y %>%
   mutate(next_day_y_hat) %>%
-  mutate(Hour = next_day_X$Hour) %>%
+  mutate(Hour = next_day_df$Hour) %>%
   relocate(Hour, .before = next_day_y)
 
 ggplot(next_day_comparisons, aes(x = Hour)) +
@@ -113,14 +126,63 @@ ggplot(next_day_comparisons, aes(x = Hour)) +
   scale_color_manual(name = "", values = c("Actual Bike Rent Count" = "black", "Predicted Bike Rent Count" = "black")) +
   theme(legend.position = "bottom")
 ```
+##### Normalize accuracy to get a percentage error
+
 ```{r}
 next_day_comparisons = next_day_comparisons %>%
-  mutate(error = abs(next_day_y - next_day_y_hat))
+  mutate(error_percent = abs(next_day_y - next_day_y_hat)/next_day_y)
+```
 
-most_accurate_hour = next_day_comparisons$Hour[which.min(next_day_comparisons$error)]
+##### Plot Error Percentage
+
+```{r}
+ggplot(next_day_comparisons, aes(x = Hour)) +
+  geom_area(aes(y = error_percent), alpha = 0.5) +
+  labs(x = "Hour", y = "Prediction Error Percentage (%)", fill = "", color = "") +
+  ggtitle("Comparison between hours and prediction error percentage")
+```
+
+
+```{r}
+most_accurate_hour = next_day_comparisons$Hour[which.min(next_day_comparisons$error_percent)]
 most_accurate_hour
 ```
 
-The predicted bike rent count appears to be most accurate at 10 am.
+The predicted bike rent count appears to be most accurate at 4 pm.
+
+#### 1e) Your friend claimed that there might be excess zero counts in particular hours or weather conditions and, it is worth to consider a more robust model. Using the same selection of covariates as in your parsimonious model in (c), validate your friend’s claim and describe how covariates affect rented bike counts. When you fit a more robust model for excess zeros, you will need to standardized covariates.
+
+```{r}
+# use variables from the parsimonious model
+seoul_bike_df = subset(seoul_bike_df, select = -c(Wind.speed, Dew.point.temperature, Solar.Radiation))
+
+# plot counts
+hist(seoul_bike_df$Rented.Bike.Count, breaks = seq(min(seoul_bike_df$Rented.Bike.Count), max(seoul_bike_df$Rented.Bike.Count) + 10, by = 10))
+```
+There appears to be a clear inflation of zeros. Try both zero-inflated poisson and hurdle models to account for this.
+
+##### Hurdle
+
+I used the hurdle model to account for zero-inflated data as we are only getting the inflated zeros from one source (covariates)
+
+```{r}
+# zero-inflated count on rented bikes
+'''
+zinf_seoul_bike <- zeroinfl(Rented.Bike.Count ~ Hour + Temperature + Humidity + Visibility, data = seoul_bike_df, dist='poisson')
+summary(zinf_seoul_bike)
+'''
+
+# standardise covariates
+seoul_bike_df[,-1] = scale(seoul_bike_df[,-1])
+
+seoul_bike_hurdle = hurdle(Rented.Bike.Count ~ ., data = seoul_bike_df, dist = 'poisson', link = 'logit')
+summary(seoul_bike_hurdle)
+```
+
+Temperature appears to have the most affect on zero-inflation? Lower temperatures indicate unfavourable 
+
+```{r}
+
+```
 
 
