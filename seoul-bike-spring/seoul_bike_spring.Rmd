@@ -35,7 +35,7 @@ ggplot(seoul_bike_df, aes(x = Snowfall)) +
   xlim(-1, 10)
 ```
 
-ALL 2136 observations in Spring record 0 cm of snowfall in that particular hour. In regression we are interested in changes of an explanatory variable and it's effect on the response variable. If the values of the snowfall are the same for all observations, then it would not be useful to model rented bike counts.
+ALL 2136 observations in Spring record 0 cm of snowfall in that particular hour. In regression we are interested in changes of an explanatory variable and it's effect on the response variable. If the values of the snowfall have no variation for all observations, then it is recommend to remove snowfall as it doesn't provide any information and may negatively impact the model's performance.
 
 #### 1b) it an appropriate regression model using all covariates except snow-fall and, find the mean squared error (MSE).
 
@@ -139,7 +139,7 @@ next_day_comparisons = next_day_comparisons %>%
 ggplot(next_day_comparisons, aes(x = Hour)) +
   geom_area(aes(y = error_percent), alpha = 0.5) +
   labs(x = "Hour", y = "Prediction Error Percentage (%)", fill = "", color = "") +
-  ggtitle("Comparison between hours and prediction error percentage")
+  ggtitle("Comparison between Hour and Prediction Error Percentage")
 ```
 
 
@@ -157,32 +157,87 @@ The predicted bike rent count appears to be most accurate at 4 pm.
 seoul_bike_df = subset(seoul_bike_df, select = -c(Wind.speed, Dew.point.temperature, Solar.Radiation))
 
 # plot counts
-hist(seoul_bike_df$Rented.Bike.Count, breaks = seq(min(seoul_bike_df$Rented.Bike.Count), max(seoul_bike_df$Rented.Bike.Count) + 10, by = 10))
+hist(seoul_bike_df$Rented.Bike.Count, breaks = seq(min(seoul_bike_df$Rented.Bike.Count), max(seoul_bike_df$Rented.Bike.Count) + 10, by = 10),
+     xlab = "Number of Rented Bikes", main = "Histogram of Rented Bike Count in Seoul")
 ```
-There appears to be a clear inflation of zeros. Try both zero-inflated poisson and hurdle models to account for this.
+There appears to be a clear inflation of zeros. I used the hurdle model to account for zero-inflated data as we are only getting the inflated zeros from one source (covariates)
 
 ##### Hurdle
 
-I used the hurdle model to account for zero-inflated data as we are only getting the inflated zeros from one source (covariates)
-
 ```{r}
-# zero-inflated count on rented bikes
-'''
-zinf_seoul_bike <- zeroinfl(Rented.Bike.Count ~ Hour + Temperature + Humidity + Visibility, data = seoul_bike_df, dist='poisson')
-summary(zinf_seoul_bike)
-'''
-
-# standardise covariates
+# standardize covariates
 seoul_bike_df[,-1] = scale(seoul_bike_df[,-1])
 
 seoul_bike_hurdle = hurdle(Rented.Bike.Count ~ ., data = seoul_bike_df, dist = 'poisson', link = 'logit')
 summary(seoul_bike_hurdle)
 ```
 
-Temperature appears to have the most affect on zero-inflation? Lower temperatures indicate unfavourable 
+All variables appears significant in the truncated poisson model with count > 0. The p-values are all significantly low, at <2e-16. For the the zero-hurdle model (binomial) all covariates have large p-values of over 0.9, apart from temperature and humidity with values of 0.154 and 0.214 respectively. Although the p-value for temperature is relatively larger than 0.05, we can still reject the null hypothesis and say that temperature has an effect on the rented bike counts. Low and high temperatures typically indicate unfavorable conditions for cycling therefore zero-inflation would be expected for rented bike counts.
+
+________________________________________________________________________________________________________
+
+The spreadsheet SeoulBikeSpring.csv excluding bike counts is the hourly
+weather record in Seoul. We now wish to model the temperature with
+other weather information and hour. For Question 2, the rented bike
+counts is excluded.
+
+#### 2a) Is snowfall still not useful in modelling temperature?
 
 ```{r}
+seoul_spring_weather_df = as.data.frame(read.csv("data/SeoulBikeSpring.csv"))
 
+# reorganise weather dataframe
+seoul_spring_weather_df = seoul_spring_weather_df[,-1]
+seoul_spring_weather_df = seoul_spring_weather_df %>%
+  relocate(Temperature, .before = "Hour")
 ```
 
+We are now modelling temperature. Even though temperature is much more related to snowfall due to physical relationships between them, it is still recommended to remove snowfall as it has no variation, i.e., all the values for that variable are the same, as they do not provide any information and may negatively impact the model's performance.
 
+#### 2b) Fit a parsimonious regression with l1 penalty. List covariates included in the parsimonious model and find the MSE. 
+
+```{r}
+# use CV on a range of lambda values for lasso regression
+cv_lasso = cv.glmnet(as.matrix(seoul_spring_weather_df[,-1]), as.matrix(seoul_spring_weather_df[,1]), alpha=1, standardize=TRUE)
+plot(cv_lasso)
+```
+
+```{r}
+lamda_par = cv_lasso$lambda.1se
+lamda_par
+```
+
+```{r}
+coef(cv_lasso, s= cv_lasso$lambda.1se)
+```
+Since we use lasso regression, we get a mixture of shrinkage and sparsity of beta coefficients. Therefore we perform variable selection. The included covariates are: Hour, Humidity, Dew.point.temperature and Solar.Radiation.
+
+```{r}
+y_hat_par = predict(cv_lasso, newx = as.matrix(seoul_spring_weather_df[,-1]), s = lamda_par, type = "response")
+
+# Calculate the MSE for the predicted values
+mse_par <- mean((seoul_spring_weather_df$Temperature - y_hat_par)^2)
+mse_par
+```
+
+#### 2c) Using the same selection of covariates as in your parsimonious model
+in (b), fit quantile regressions for median and lower/upper quartile
+temperatures. Present boxplot of median and lower/upper quartile
+temperatures against hours. Describe the two points in the relation
+between covariates and conditional distribution for temperature.
+
+```{r}
+ql25 <- rq(Temperature ~ Hour + Humidity + Dew.point.temperature + Solar.Radiation, data = seoul_spring_weather_df, tau = 0.25)
+ql50 <- rq(Temperature ~ Hour + Humidity + Dew.point.temperature + Solar.Radiation, data = seoul_spring_weather_df, tau = 0.50)
+ql75 <- rq(Temperature ~ Hour + Humidity + Dew.point.temperature + Solar.Radiation, data = seoul_spring_weather_df, tau = 0.75)
+```
+
+```{r}
+ggplot(seoul_spring_weather_df, aes(x = as.factor(Hour), y = Temperature)) + 
+  geom_boxplot() +
+  ggtitle("Hour of Day vs Temperature in Seoul Spring") +
+  xlab("Hours")
+```
+- The effect of hour on temperature is nonlinear. The boxplots show that temperature has a U-shaped relationship with Hour, with higher temperatures in the late morning to the late afternoon, and lower temperatures in the early evening to the late morning. *The quantile regression lines confirm this, showing that the effect of hour on temperature is nonlinear for all three quantiles.
+
+- Looking at the median, upper and lower quantiles, temperatures appear normally distributed during cooler times in the day (early evening to the late morning), however temperatures appear to be left-skewed for hotter times of the day (late morning to the late afternoon). 
