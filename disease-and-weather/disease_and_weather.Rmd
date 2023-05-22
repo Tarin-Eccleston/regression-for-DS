@@ -1,0 +1,52 @@
+---
+title: "Untitled"
+output: html_document
+date: "2023-05-22"
+---
+
+## STATS 762: Assignment 4
+### Author: Tarin Eccleston
+
+#### Cardiovascular diseases (CVDs) are one of major causes of death glob-
+ally. About 17.9 million lives die each year and this is about 31% of all
+deaths worldwide. Heart failure is a common event caused by CVDs and
+the dataset train.csv contains 10 features that can be used to predict
+mortality by heart failure.
+
+```{r}
+setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS/disease-and-weather/")
+library(rpart)
+library(randomForest)
+library(tidyverse)
+```
+
+#### 1a) Which explanatory variables are nominal? Which explanatory vari-
+ables are numeric? Identify them and modify data to read explana-
+tory variables correctly. 
+
+```{r}
+cvd_df = read_csv("data/train.csv")
+glimpse(cvd_df)
+```
+
+Nominal: anaemia, diabetes, high_blood_pressure, sex, smoking, death
+Numeric: age, creatinine_phosphokinase, ejection_fraction, platelets, serum_sodium
+
+```{r}
+# force to factor
+cvd_df$anaemia = as.factor(cvd_df$anaemia)
+cvd_df$diabetes = as.factor(cvd_df$diabetes)
+cvd_df$high_blood_pressure = as.factor(cvd_df$high_blood_pressure)
+cvd_df$sex = as.factor(cvd_df$sex)
+cvd_df$smoking = as.factor(cvd_df$smoking)
+cvd_df$death = as.factor(cvd_df$death)
+```
+
+#### 1b) Fit an appropriate regression model using all explanatory variables.
+Write the reason for your model choice. 
+
+```{r}
+
+```
+
+
