@@ -1,6 +1,193 @@
+## University Program Classifier
+
+Takeaways
+- We decide on the type of model based on evaluation performance and the complexity of our data and variables
+
 ```{r}
+library(MASS) 
+library(klaR)
+library(nnet)
+library(reshape2)
+library(ggplot2)
+library(e1071) 
 setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS/classification/")
+```
+#### Read Data
 
+```{r}
+ml_df = read.csv("data/ml00-1.csv")
 
+# convert prog to factor with 3 levels "academic", "general", "vocational"
+ml_df$prog = as.factor(ml_df$prog)
+str(ml_df)
+```
+#### Train/Test Split
+
+```{r}
+# sampling
+ml_train_df = ml_df[sample(x = nrow(ml_df), size = 150, replace = FALSE),]
+
+train_rows <- as.numeric(rownames(ml_train_df))
+ml_test_df <- ml_df[-train_rows,]
 ```
 
+#### Multinomial Logistic Regression
+
+Linear boundary between classes
+
+```{r}
+ml_mn <- multinom(prog ~ ., data = ml_train_df)
+ml_mn
+
+# class membership probabilities
+prob=fitted(ml_mn)
+print(prob[1:5,])
+
+# class probability for the test data 
+prob_prog <- predict(ml_mn, newdata = ml_test_df, type='prob') 
+
+# class prediction for the test data 
+pre_prog <- predict(ml_mn, newdata = ml_test_df) 
+
+#confusion matrix
+conf.mx <- table(pre_prog, ml_test_df$prog)
+conf.mx
+```
+Not great...
+
+#### LDA
+
+- Assume features follow normal distribution
+- Covariance between each class is the same
+- The mean centers are the only difference between classes
+- Boundary is the intersection between the surfaces of distribution
+
+```{r}
+# fit the LDA for the train data
+ml_lda <- lda(prog ~ ., ml_train_df)
+
+# prior probabilities
+ml_lda$prior
+# group specific mean
+ml_lda$means
+
+# plot boundaries
+partimat(prog ~ ., ml_train_df, method = "lda")
+```
+
+
+```{r}
+# prediction 
+pred_prog = predict(ml_lda, ml_test_df)
+
+# class membership probability 
+pred_prog$posterior
+
+# confusion matrix
+lda_mx = table(pred_prog$class, ml_test_df$prog)
+lda_mx
+```
+LDA looks a little better than multinomial
+
+#### QDA
+
+- Assume features follow normal distribution
+- Covariance between each class is different
+- The mean centers is difference between classes
+- Boundary is the intersection between the surfaces of distribution, allows for flexbility
+
+```{r}
+# fit the LDA for the train data
+ml_qda <- qda(prog ~ ., ml_train_df)
+
+# prior probabilities
+ml_qda$prior
+# group specific mean
+ml_qda$means
+
+# plot boundaries
+partimat(prog ~ ., ml_train_df, method = "qda")
+```
+
+
+```{r}
+# prediction 
+pred_prog = predict(ml_qda, ml_test_df)
+
+# class membership probability 
+pred_prog$posterior
+
+# confusion matrix
+qda_mx = table(pred_prog$class, ml_test_df$prog)
+qda_mx
+```
+QDA slightly worse than LDA
+
+#### SVM (Support Vector Machine)
+
+- Much more flexible than QDA and LDA
+- Should be used with CARE, as it could lead to overfitting
+- Choosing kernel is quite 
+
+```{r}
+ml_svm1 <- svm(prog ~ ., ml_train_df, kernel = 'linear', probability=TRUE)
+plot(ml_svm1, ml_train_df, read ~ write)
+
+svm1.pred <- predict(iris.svm1,iris[test.index,],probability=TRUE)
+svm1.mx <- table(iris$Species[test.index],svm1.pred)
+svm1.mx
+
+iris.svm2 <- svm(as.factor(Species)~., data=iris[-test.index,],probability=TRUE)
+plot(iris.svm2, iris[-test.index,], Petal.Width ~ Petal.Length, slice = list(Sepal.Width = 3, Sepal.Length = 4))
+
+svm2.pred.class <- predict(iris.svm2,iris[test.index,])
+svm2.pred <- predict(iris.svm2,iris[test.index,],probability=TRUE)
+svm2.pred.prob <- attr(svm2.pred, "probabilities")
+
+svm2.mx <- table(iris$Species[test.index],svm2.pred.class)
+svm2.mx
+
+measure.classification(class.pred=svm2.pred.class,prob.class=svm2.pred.prob,class.obs=iris$Species[test.index],svm2.mx)
+```
+
+### Evaluation Functions
+
+- We use the following metrics to decide between multinomial, LDA, QDA or SVM
+
+#### Computes classification performance estimates (entropy,avg accuracy,error rate,precision,recall,F1-score). 
+
+```{r}
+measure.classification <- function(class.pred,prob.class,class.obs,conf.mx){
+  #class.pred=class prediction
+  #prob.class=predicted class probability
+  #conf.mx=confusion matrix; observed class in column and predict class in row 
+  #class.obs=class observation
+  entropy <- 0 
+  for(i in levels(class.pred)){
+  entropy = entropy-sum(log(prob.class[class.obs==i,colnames(prob.class)==i])) }
+  avg.accuracy=err.rate=0
+  for (i in 1:ncol(conf.mx)){
+    avg.accuracy <- avg.accuracy + (conf.mx[i,i]+sum(conf.mx[-i,-i]))/sum(conf.mx)
+  err.rate <- err.rate + (sum(conf.mx[i,-i])+sum(conf.mx[-i,i]))/sum(conf.mx)
+  }
+  avg.accuracy=avg.accuracy/i
+  err.rate=err.rate/i
+  precision <- mean(diag(conf.mx)/rowSums(conf.mx))
+  recall <- mean(diag(conf.mx)/colSums(conf.mx))
+  F1.score <- 2*precision*recall/(precision+recall)
+  return(list(entropy=entropy,avg.accuracy=avg.accuracy,err.rate=err.rate,precision=precision,recall=recall,F1.score=F1.score))
+}
+```
+
+#### Classification performance estimates
+
+```{r}
+measure.classification(class.pred=pre.species,prob.class=prob.species,class.obs=iris$Species[test.index],conf.mx)
+  
+#cross entropy estimation
+entropy <- 0
+for(i in levels(pre.species)){
+  entropy = entropy-sum(log(prob.species[iris$Species[test.index]==i,colnames(prob.species)==i]))
+}
+entropy 
+```

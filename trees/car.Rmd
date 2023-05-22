@@ -1,0 +1,67 @@
+
+If there is a lot of variability in y, then the tree model will perform better on average
+
+```{r}
+setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS/trees/")
+library(rpart)
+library(tidyverse)
+library(randomForest)
+
+car_df = read_csv("data/car.csv")
+glimpse(car_df)
+```
+
+## Task 1: Two potential relationships are suggested. The first one is a simple linear regression and the second one is a log-linear regression. Which one is better? Using a sensible model validation measure, compare the two models. 
+
+```{r}
+#index = sample(nrow(car_df), as.integer(nrow(car_df)*0.8), replace = FALSE)
+index = which(is.na(car_df$Price))
+train_data = car_df[-index, ]
+test_data = car_df[index, ]
+
+car_log_lm = lm(log(Price) ~ ., data = train_data)
+y_hat_log = predict(car_log_lm, train_data)
+y_hat_log = exp(y_hat_log)
+mse_log = mean((train_data$Price - y_hat_log)^2)
+
+car_lm = lm(Price ~ ., data = train_data)
+y_hat = predict(car_lm, train_data)
+mse = mean((train_data$Price - y_hat)^2)
+```
+
+Normal model appears to have a lower MSE.
+
+## Task 2: Can we improve the model fit using tree-based method? Use the same validation measure in 1 and compare performance of standard regression and  regression tree. Describe the relationship between price and the three explanatory variables of your chosen model.
+
+```{r}
+# fit a regression tree with the default cp=0.01
+car_cart0 <- rpart(Price ~ ., data = train_data, method='anova')
+car_cart0$cptable
+```
+```{r}
+y_tree_hat = predict(prune(car_cart0,cp=car_cart0$cptable[which.min(car_cart0$cptable[,4]),1]), newdata=train_data)
+mse_tree = mean((y_tree_hat-train_data$Price)^2)
+mse_tree
+```
+
+## Task 3: Can we improve the performance of regression tree for this problem? Demonstrate how you can improve the performance and write why it is improved. Which explanatory variable is the most useful in predicting a price?
+
+```{r}
+car_rf <- randomForest(Price ~., data = train_data, importance=TRUE)
+plot(car_rf)
+```
+
+```{r}
+y_tree_hat = predict(car_rf, newdata=train_data)
+mse_tree = mean((y_tree_hat-train_data$Price)^2)
+mse_tree
+```
+
+MSE is much less. We can use random forest as there is already quite some variable in the data. Also averaging is a regularization technique which would give a better unbiased estimate on the test data.
+
+## Task 4: Using your choice of model in 3, predict missing-prices. 
+
+```{r}
+test_data$Price = predict(car_rf, newdata=test_data)
+test_data
+```

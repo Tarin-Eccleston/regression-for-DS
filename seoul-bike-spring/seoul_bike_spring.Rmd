@@ -1,14 +1,13 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
 ## STATS 762: Assignment 3
 ### Author: Tarin Eccleston
 
-NOTES
-- Low mse, however high p-value could be due to multicol, or high variances compared to mean.
-- Need to standardardise the features...
-
-Rental bikes are introduced in many urban cities for the enhancement of mobility comfort. It is important to make the rental bike available and accessible to the public at the right time. In order to provide the city with a stable supply
-of rental bikes, a reliable model for rented bike counts at each hour and weather is required.
-
-The spreadsheet SeoulBikeSpring.csv contains rented bike counts at each hour and weather information in Seoul, Korea.
+#### Rental bikes are introduced in many urban cities for the enhancement of mobility comfort. It is important to make the rental bike available and accessible to the public at the right time. In order to provide the city with a stable supply
+of rental bikes, a reliable model for rented bike counts at each hour and weather is required. The spreadsheet SeoulBikeSpring.csv contains rented bike counts at each hour and weather information in Seoul, Korea.
 
 ```{r}
 library(tidyverse)
@@ -43,18 +42,14 @@ ALL 2136 observations in Spring record 0 cm of snowfall in that particular hour.
 # remove snowfall
 seoul_bike_df = subset(seoul_bike_df, select = -c(Snowfall))
 
-'''
-# train / test split
-sample_index = sample(nrow(seoul_bike_df), as.numeric(nrow(seoul_bike_df) * 0.8), replace = FALSE)
-seoul_bike_train_df = seoul_bike_df[sample_index,]
-seoul_bike_test_df = seoul_bike_df[-sample_index,]
-'''
-
 # fit poisson model as we are trying to count the number of rented bikes
 # include polynomial terms
 seoul_bike_fit = glm(Rented.Bike.Count ~ ., family = "poisson", data = seoul_bike_df)
 summary(seoul_bike_fit)
 ```
+
+All covariates appears to be significant.
+
 ```{r}
 # Use the fitted model to predict the response variable for the testing data
 y_hat = predict(seoul_bike_fit, newdata = seoul_bike_df, type = "response")
@@ -68,7 +63,7 @@ mse
 
 ```{r}
 # use CV on a range of lambda values for lasso regression
-cv_lasso = cv.glmnet(as.matrix(seoul_bike_df[,-1]), as.matrix(seoul_bike_df[,1]), alpha=1, standardize=TRUE)
+cv_lasso = cv.glmnet(as.matrix(seoul_bike_df[,-1]), as.matrix(seoul_bike_df[,1]), alpha=1 , family = "poisson", standardize=TRUE)
 plot(cv_lasso)
 ```
 
@@ -80,6 +75,7 @@ lamda_par
 ```{r}
 coef(cv_lasso, s= cv_lasso$lambda.1se)
 ```
+
 Since we use lasso regression, we get a mixture of shrinkage and sparsity of beta coefficients. Therefore we perform variable selection. The included covariates are: Hour, Temperature, Humidity, Visibility and Rainfall.
 
 ```{r}
@@ -126,6 +122,7 @@ ggplot(next_day_comparisons, aes(x = Hour)) +
   scale_color_manual(name = "", values = c("Actual Bike Rent Count" = "black", "Predicted Bike Rent Count" = "black")) +
   theme(legend.position = "bottom")
 ```
+
 ##### Normalize accuracy to get a percentage error
 
 ```{r}
@@ -148,11 +145,14 @@ most_accurate_hour = next_day_comparisons$Hour[which.min(next_day_comparisons$er
 most_accurate_hour
 ```
 
-The predicted bike rent count appears to be most accurate at 4 pm.
+The predicted bike rent count appears to be most accurate at 5 pm. However since we are discreting the data, the final answer will be 5 pm - 6 pm.
 
 #### 1e) Your friend claimed that there might be excess zero counts in particular hours or weather conditions and, it is worth to consider a more robust model. Using the same selection of covariates as in your parsimonious model in (c), validate your friend’s claim and describe how covariates affect rented bike counts. When you fit a more robust model for excess zeros, you will need to standardized covariates.
 
 ```{r}
+# create data frame here
+model_comparisons = data.frame(matrix(nrow = 3, ncol = 2)) 
+
 # use variables from the parsimonious model
 seoul_bike_df = subset(seoul_bike_df, select = -c(Wind.speed, Dew.point.temperature, Solar.Radiation))
 
@@ -160,19 +160,70 @@ seoul_bike_df = subset(seoul_bike_df, select = -c(Wind.speed, Dew.point.temperat
 hist(seoul_bike_df$Rented.Bike.Count, breaks = seq(min(seoul_bike_df$Rented.Bike.Count), max(seoul_bike_df$Rented.Bike.Count) + 10, by = 10),
      xlab = "Number of Rented Bikes", main = "Histogram of Rented Bike Count in Seoul")
 ```
-There appears to be a clear inflation of zeros. I used the hurdle model to account for zero-inflated data as we are only getting the inflated zeros from one source (covariates)
 
-##### Hurdle
+There appears to be a clear inflation of zeros. I intend to use the hurdle model to account for zero-inflated data as we are only getting the inflated zeros from one source (covariates). Always good to compare with zero-inflated poisson and standard poisson
+
+##### Poisson
 
 ```{r}
 # standardize covariates
 seoul_bike_df[,-1] = scale(seoul_bike_df[,-1])
 
-seoul_bike_hurdle = hurdle(Rented.Bike.Count ~ ., data = seoul_bike_df, dist = 'poisson', link = 'logit')
-summary(seoul_bike_hurdle)
+seoul_bike_poisson_fit = glm(Rented.Bike.Count ~ ., data = seoul_bike_df, family = 'poisson')
+
+# Calculate the MSE for the predicted values
+y_hat_poisson = predict(seoul_bike_poisson_fit, newx = as.matrix(seoul_bike_df[,-1]), type = "response")
+mse_poisson = mean((seoul_bike_df$Rented.Bike.Count - y_hat_poisson)^2)
+model_comparisons[1,1] = mse_poisson
+AIC_poisson = AIC(seoul_bike_poisson_fit)
+model_comparisons[1,2] = AIC_poisson
+summary(seoul_bike_poisson_fit)
 ```
 
-All variables appears significant in the truncated poisson model with count > 0. The p-values are all significantly low, at <2e-16. For the the zero-hurdle model (binomial) all covariates have large p-values of over 0.9, apart from temperature and humidity with values of 0.154 and 0.214 respectively. Although the p-value for temperature is relatively larger than 0.05, we can still reject the null hypothesis and say that temperature has an effect on the rented bike counts. Low and high temperatures typically indicate unfavorable conditions for cycling therefore zero-inflation would be expected for rented bike counts.
+##### Zero-Inflated Poisson
+
+```{r}
+seoul_bike_zinf_fit <- zeroinfl(Rented.Bike.Count ~ ., data = seoul_bike_df, dist='poisson')
+
+# Calculate the MSE for the predicted values
+y_hat_zinf = predict(seoul_bike_zinf_fit, newx = as.matrix(seoul_bike_df[,-1]), type = "response")
+mse_zinf = mean((seoul_bike_df$Rented.Bike.Count - y_hat_zinf)^2)
+model_comparisons[2,1] = mse_zinf
+AIC_zinf = AIC(seoul_bike_zinf_fit)
+model_comparisons[2,2] = AIC_zinf
+summary(seoul_bike_zinf_fit)
+```
+
+##### Hurdle
+
+```{r}
+seoul_bike_hurdle_fit = hurdle(Rented.Bike.Count ~ ., data = seoul_bike_df, dist = 'poisson', link = 'logit')
+
+# Calculate the MSE and AIC for the predicted values
+y_hat_hurdle = predict(seoul_bike_hurdle_fit, newx = as.matrix(seoul_bike_df[,-1]), type = "response")
+mse_hurdle = mean((seoul_bike_df$Rented.Bike.Count - y_hat_hurdle)^2)
+model_comparisons[3,1] = mse_hurdle
+AIC_hurdle = AIC(seoul_bike_hurdle_fit)
+model_comparisons[3,2] = AIC_hurdle
+summary(seoul_bike_hurdle_fit)
+```
+
+```{r}
+colnames(model_comparisons) = c("MSE", "AIC")
+rownames(model_comparisons) = c("Poisson", "Zero-inflated Poisson", "Hurdle")
+
+model_comparisons
+```
+
+I compared poisson, zero-inflated poisson and hurdle models, particularly their mse and AIC scores. Poisson had the lowest mse score, followed by Hurdle then zero-inflated poisson. For AIC, Poisson had the highest value, followed by zero-inflated poisson then hurdle. Hurdle had an AIC score 135 less than zero-inflated poisson, which is significant, indicating that it's the model with the best fit to the data. We cannot rely on mse and AIC alone to chose the right model, despite hurdle having a higher mse than poisson, it is probably a better fit to our data. 
+
+Additionally, hurdle appears to be the most appropriate model given the context - we only have zeros rental bike counts from one source. Using the hurdle model would be the best in choice compared to the poisson and zero-inflated poisson models as we can appropriately account for the zero-inflation. It is also important to note that the AIC value for hurle is still high, however we are making a relative comparison in this case.
+
+For the hurdle model, all variables appear significant in the truncated poisson model with count > 0. The p-values are all significantly low, at <2e-16. For the the zero-hurdle model (binomial) all covariates have large p-values of over 0.9, apart from temperature and humidity with values of 0.154 and 0.214 respectively. Although the p-value for temperature is relatively larger than 0.05, we can still reject the null hypothesis and say that temperature has an effect on the rented bike counts. We can accept the friend's claim as low and high temperatures typically indicate unfavorable conditions for cycling causing zero-inflation for rented bike counts.
+
+If we are interested in finding the effect of each covariates on the count of the truncated poisson for the hurdle model, we look at the summary. Hour, temperature and visibility all have a positive relationships with rental bike counts. For example, if we were to keep all other covariates constant and increase hour by one unit, we would get a e^(0.318) or 1.374 times increase in bike accounts. For temperature and visibility, we would expect a 1.43 times and 1.006 times increase in rental bike counts per unit increase respectively. Humidity and rainfall both have negative relationships with rental bike counts. We would expect to see a 0.862 times and 0.330 times decrease in rental bike counts per unit increase of these variables respectfully. 
+
+This is expected, as higher temperatures (provided not too hot) and visibility are favorable conditions for biking. Whereas higher rainfall and humidity aren't favourable for biking, and we would expect to see less rental hires as a result.
 
 ________________________________________________________________________________________________________
 
@@ -192,13 +243,15 @@ seoul_spring_weather_df = seoul_spring_weather_df %>%
   relocate(Temperature, .before = "Hour")
 ```
 
-We are now modelling temperature. Even though temperature is much more related to snowfall due to physical relationships between them, it is still recommended to remove snowfall as it has no variation, i.e., all the values for that variable are the same, as they do not provide any information and may negatively impact the model's performance.
+#### We are now modelling temperature. Even though temperature is much more related to snowfall due to physical relationships between them, it is still recommended to remove snowfall as it has no variation, i.e., all the values for that variable are the same, as they do not provide any information and may negatively impact the model's performance.
 
-#### 2b) Fit a parsimonious regression with l1 penalty. List covariates included in the parsimonious model and find the MSE. 
+#### 2b) Fit a parsimonious regression with l1 penalty. List covariates included in the parsimonious model and find the MSE.
 
 ```{r}
+seoul_spring_weather_df = subset(seoul_spring_weather_df, select = -c(Snowfall))
+
 # use CV on a range of lambda values for lasso regression
-cv_lasso = cv.glmnet(as.matrix(seoul_spring_weather_df[,-1]), as.matrix(seoul_spring_weather_df[,1]), alpha=1, standardize=TRUE)
+cv_lasso = cv.glmnet(as.matrix(seoul_spring_weather_df[,-1]), as.matrix(seoul_spring_weather_df[,1]), family = 'gaussian', alpha=1, standardize=TRUE)
 plot(cv_lasso)
 ```
 
@@ -227,17 +280,100 @@ temperatures against hours. Describe the two points in the relation
 between covariates and conditional distribution for temperature.
 
 ```{r}
-ql25 <- rq(Temperature ~ Hour + Humidity + Dew.point.temperature + Solar.Radiation, data = seoul_spring_weather_df, tau = 0.25)
-ql50 <- rq(Temperature ~ Hour + Humidity + Dew.point.temperature + Solar.Radiation, data = seoul_spring_weather_df, tau = 0.50)
-ql75 <- rq(Temperature ~ Hour + Humidity + Dew.point.temperature + Solar.Radiation, data = seoul_spring_weather_df, tau = 0.75)
+# models for median and quartiles
+q25 = rq(Temperature ~ Hour + Humidity + Dew.point.temperature + Solar.Radiation, data = seoul_spring_weather_df, tau = 0.25)
+q25_pred = predict(q25, newdata = seoul_spring_weather_df, type='response')
+
+q50 = rq(Temperature ~ Hour + Humidity + Dew.point.temperature + Solar.Radiation, data = seoul_spring_weather_df, tau = 0.50)
+q50_pred = predict(q50, newdata = seoul_spring_weather_df, type='response')
+
+q75 = rq(Temperature ~ Hour + Humidity + Dew.point.temperature + Solar.Radiation, data = seoul_spring_weather_df, tau = 0.75)
+q75_pred = predict(q75, newdata = seoul_spring_weather_df, type='response')
+```
+
+##### Boxplots for Each Quantile
+
+```{r}
+plot_df = data.frame(Hour = seoul_spring_weather_df$Hour, q25_pred, q50_pred, q75_pred)
+boxplot(q25_pred ~ Hour, data = plot_df, xlab = "Hour", ylab = "Lower Quartile Temperature")
+```
+```{r}
+boxplot(q50_pred ~ Hour, data = plot_df, xlab = "Hour", ylab = "Median Temperature")
 ```
 
 ```{r}
+boxplot(q75_pred ~ Hour, data = plot_df, xlab = "Hour", ylab = "Upper Quartile Temperature")
+```
+
+##### Boxplot for All Quantiles Combined
+
+```{r}
+# overall temperature
 ggplot(seoul_spring_weather_df, aes(x = as.factor(Hour), y = Temperature)) + 
   geom_boxplot() +
   ggtitle("Hour of Day vs Temperature in Seoul Spring") +
   xlab("Hours")
 ```
-- The effect of hour on temperature is nonlinear. The boxplots show that temperature has a U-shaped relationship with Hour, with higher temperatures in the late morning to the late afternoon, and lower temperatures in the early evening to the late morning. *The quantile regression lines confirm this, showing that the effect of hour on temperature is nonlinear for all three quantiles.
 
-- Looking at the median, upper and lower quantiles, temperatures appear normally distributed during cooler times in the day (early evening to the late morning), however temperatures appear to be left-skewed for hotter times of the day (late morning to the late afternoon). 
+- The effect of hour on temperature is nonlinear. The boxplots show that temperature has a U-shaped relationship with Hour, with higher temperatures in the late morning to the late afternoon, and lower temperatures in the early evening to the late morning.
+
+- Looking at the median, upper and lower quantiles, temperatures appear normally distributed during cooler times in the day (early evening to the late morning), however temperatures appear to be left-skewed for warmer times of the day (late morning to the late afternoon). 
+
+##### Plot of Each Covariate Quantiles Agaisnt Temperature
+
+```{r}
+T=c(0.05,0.1,0.25,0.5,0.75,0.9,0.95)
+{
+plot(Temperature ~ Hour, data = seoul_spring_weather_df, main = "Temperature ~ Hour", ylab= "Temperature", xlab= 'Hour')
+abline(lm(Temperature ~ Hour, data = seoul_spring_weather_df), col = 1); 
+
+for(t in 1:length(T)){
+  abline(rq(Temperature ~ Hour, data = seoul_spring_weather_df, tau=T[t]), col = t+1)
+}
+legend("topright", legend = c("lm", paste("rq,",as.character(T))), col = c(1:(length(T)+1)),lty = 1)
+}
+```
+
+Same conclusion as above.
+
+```{r}
+{
+plot(Temperature ~ Humidity, data = seoul_spring_weather_df, main = "Temperature ~ Humidity", ylab= "Temperature", xlab= 'Humidity')
+abline(lm(Temperature ~ Humidity, data = seoul_spring_weather_df), col = 1); 
+
+for(t in 1:length(T)){
+  abline(rq(Temperature ~ Humidity, data = seoul_spring_weather_df, tau=T[t]), col = t+1)
+}
+legend("topright", legend = c("lm", paste("rq,",as.character(T))), col = c(1:(length(T)+1)),lty = 1)
+}
+```
+
+Negative relationship with humidity. Appears to be slightly more left skewed, consistent variance.
+
+```{r}
+{
+plot(Temperature ~ Dew.point.temperature, data = seoul_spring_weather_df, main = "Temperature ~ Dew.point.temperature", ylab= "Temperature", xlab= 'Dew.point.temperature')
+abline(lm(Temperature ~ Dew.point.temperature, data = seoul_spring_weather_df), col = 1); 
+
+for(t in 1:length(T)){
+  abline(rq(Temperature ~ Dew.point.temperature, data = seoul_spring_weather_df, tau=T[t]), col = t+1)
+}
+legend("topright", legend = c("lm", paste("rq,",as.character(T))), col = c(1:(length(T)+1)),lty = 1)
+}
+```
+
+Positive relationship with temperature. Clear threshold at lowest quantile of 0.05. Appears right skewed with decreasing variance as dew point temperature increases. Note: dew point temperature is directly calculated from temperature therefore we would expect to see some of threshold.
+
+```{r}
+{
+plot(Temperature ~ Solar.Radiation, data = seoul_spring_weather_df, main = "Temperature ~ Solar.Radiation", ylab= "Temperature", xlab= 'Solar.Radiation')
+abline(lm(Temperature ~ Solar.Radiation, data = seoul_spring_weather_df), col = 1); 
+
+for(t in 1:length(T)){
+  abline(rq(Temperature ~ Solar.Radiation, data = seoul_spring_weather_df, tau=T[t]), col = t+1)
+}
+legend("topright", legend = c("lm", paste("rq,",as.character(T))), col = c(1:(length(T)+1)),lty = 1)
+}
+```
+
+Positive relationship with temperature. Appears symmetrically distributed with light tails., consistent variance. Note: many more data points at lower solar radiation.
