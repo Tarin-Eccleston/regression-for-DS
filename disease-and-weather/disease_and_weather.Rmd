@@ -45,6 +45,7 @@ library(randomForest)
 library(tidyverse)
 library(MASS) 
 library(klaR)
+library(e1071)
 ```
 
 #### 1a) Which explanatory variables are nominal? Which explanatory vari-
@@ -76,6 +77,12 @@ Write the reason for your model choice.
 index = sample(nrow(cvd_df), as.integer(nrow(cvd_df)*0.8), replace = FALSE)
 cvd_train_df = cvd_df[index, ]
 cvd_test_df = cvd_df[-index, ]
+
+# standardize numeric covariates on test/training sets
+exclude_cols <- c("death", "anaemia", "diabetes", "high_blood_pressure", "sex", "smoking")
+
+cvd_train_df[, -which(names(cvd_train_df) %in% exclude_cols)] <- scale(cvd_train_df[, -which(names(cvd_train_df) %in% exclude_cols)])
+cvd_test_df[, -which(names(cvd_test_df) %in% exclude_cols)] = scale(cvd_test_df[, -which(names(cvd_test_df) %in% exclude_cols)])
 
 # fit model
 cvd_log_fit = glm(death ~ ., data = cvd_train_df, family = 'binomial')
@@ -119,7 +126,7 @@ rownames(metrics_logistic) = "Logistic Regression"
 metric_comparison = rbind(metric_comparison, metrics_logistic)
 ```
 
-Decision Tree performs roughly the same - slightly worse on the positive class (death) and slightly better the negative class (not death). This could be due to use discretion of the decision space, which could result in a loss of information from other variables.
+Decision Tree performs worse. This could be due to use discretion of the decision space, which could result in a loss of information from other variables.
 
 #### 1c) In your final model in (b), which variables are useful in predicting
 death due to heart failure? List the most important two variables
@@ -153,20 +160,54 @@ numeric explanatory variables, do we get a better classifer? Compare
 classifiers using the same validation method in (b) and answer the
 question
 
-Use now only age, creatinine_phosphokinase, ejection_fraction, platelets, serum_sodium in our model.
+Use now only age, creatinine_phosphokinase, ejection_fraction, platelets, serum_sodium in our model. We can now use LDA, QDA and SVM on-top of decision trees, random forests and boosting methods. Let's compare their relative performances using the aforementioned evaluation metrics. Let's do an EDA first...
 
-We can now use LDA, QDA and SVM on-top of decision trees, random forests and boosting methods. Let's compare their relative performances and decide which ones perform the best.
+#### Exploratory Data Analysis
 
-#### LDA
 ```{r}
-cvd_lda_fit = lda(death ~ age + creatinine_phosphokinase + ejection_fraction + platelets + serum_sodium, cvd_train_df)
+# standardise covariates for the whole dataset for the EDA
+cvd_df[, -which(names(cvd_df) %in% exclude_cols)] <- scale(cvd_df[, -which(names(cvd_df) %in% exclude_cols)])
 
-# prior probabilities
-cvd_lda_fit$prior
+legend_colors = c("red", "blue")
+{
+pairs(cvd_df[c("age", "creatinine_phosphokinase", "ejection_fraction", "platelets", "serum_sodium")],
+      col = ifelse(cvd_df$death == 1, "red", "blue"),
+      main = "Pairs Plot of Explanatory Variables and Death")
+
+legend("topright", legend = c("Death", "Survived"), col = legend_colors, pch = 1)
+}
 ```
 
 ```{r}
-# group specific mean
+class_freq = table(cvd_df$death)
+
+class_labels = recode(names(class_freq), "1" = "death", "0" = "survived")
+
+ggplot(data.frame(Class = class_labels, Frequency = as.vector(class_freq)), aes(x = Class, y = Frequency, fill = Class)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("red", "blue")) +
+  xlab("Class") +
+  ylab("Frequency") +
+  ggtitle("Class Imbalance in the Dataset")
+```
+
+
+- There appears to be a somewhat clear separation vertical linear boundary between death and survival at the lower end of ejection fraction compared to all other explanatory variables. 
+
+- Observations with a greater age appear to have a higher chance of dying due to CVD.
+
+- Platelets and serum sodium vs other explanatory variables appear to have a appear to have slight quadratic decision boundaries between death and survival.
+
+- No notable blobs in the pair plot.
+
+- No distinguishable distribution or clusters between death and surviving classes for all pairs of explanatory variables.
+
+- There appears to be a class imbalance between survived and dead observations, with the survived class having twice more observations.
+
+#### LDA
+
+```{r}
+cvd_lda_fit = lda(death ~ age + creatinine_phosphokinase + ejection_fraction + platelets + serum_sodium, cvd_train_df)
 cvd_lda_fit$means
 ```
 
@@ -184,7 +225,6 @@ death_lda_pred = as.data.frame(death_lda_pred)
 lda_mx <- table(death_lda_pred$class, cvd_test_df$death)
 lda_mx
 ```
-NOTE: We use posterior 1???
 
 ```{r}
 # metrics_lda = measure.classification(death_lda_pred$class, death_lda_pred$posterior.1, cvd_test_df$death, lda_mx)
@@ -198,13 +238,6 @@ metric_comparison = rbind(metric_comparison, metrics_lda)
 
 ```{r}
 cvd_qda_fit = qda(death ~ age + creatinine_phosphokinase + ejection_fraction + platelets + serum_sodium, cvd_train_df)
-
-# prior probabilities
-cvd_qda_fit$prior
-```
-
-```{r}
-# group specific mean
 cvd_qda_fit$means
 ```
 
@@ -222,7 +255,6 @@ death_qda_pred = as.data.frame(death_qda_pred)
 qda_mx <- table(death_qda_pred$class, cvd_test_df$death)
 qda_mx
 ```
-NOTE: We use posterior 1???
 
 ```{r}
 # metrics_qda = measure.classification(death_qda_pred$class, death_qda_pred$posterior.1, cvd_test_df$death, qda_mx)
@@ -232,10 +264,93 @@ rownames(metrics_qda) = "QDA"
 metric_comparison = rbind(metric_comparison, metrics_qda)
 ```
 
-#### SVM
+#### SVM (Linear Kernel)
 ```{r}
-iris.svm1 <- svm(as.factor(death) ~ age + creatinine_phosphokinase + ejection_fraction + platelets + serum_sodium, data = cvd_train_df, kernel = 'linear', probability = TRUE)
-plot(iris.svm1, iris[-test.index,], Petal.Width ~ Petal.Length, slice = list(Sepal.Width = 3, Sepal.Length = 4))
+cvd_svm_linear_fit <- svm(as.factor(death) ~ age + creatinine_phosphokinase + ejection_fraction + platelets + serum_sodium, data = cvd_train_df, kernel = 'linear', probability = TRUE)
+
+# most interesting plots
+{
+plot(cvd_svm_linear_fit, cvd_train_df, age ~ ejection_fraction)
+plot(cvd_svm_linear_fit, cvd_train_df, age ~ creatinine_phosphokinase)
+plot(cvd_svm_linear_fit, cvd_train_df, age ~ platelets)
+plot(cvd_svm_linear_fit, cvd_train_df, age ~ serum_sodium)
+plot(cvd_svm_linear_fit, cvd_train_df, creatinine_phosphokinase ~ ejection_fraction)
+plot(cvd_svm_linear_fit, cvd_train_df, ejection_fraction ~ serum_sodium)
+}
+```
+
+Age vs Ejection Fraction shows the strongest decision boundary to distinguish the positive and negative classes in absence of a distribution.
+
+```{r}
+death_svm_linear_pred = predict(cvd_svm_linear_fit, cvd_test_df)
+
+svm_linear_mx = table(death_svm_linear_pred, cvd_test_df$death)
+svm_linear_mx
+```
+
+```{r}
+metrics_svm_linear = measure.classification(death_svm_linear_pred, cvd_test_df$death, svm_linear_mx)
+rownames(metrics_svm_linear) = "SVM (Linear Kernel)"
+
+metric_comparison = rbind(metric_comparison, metrics_svm_linear)
+```
+
+#### SVM (Polynomial Kernel)
+
+```{r}
+cvd_svm_poly_fit = svm(as.factor(death) ~ age + creatinine_phosphokinase + ejection_fraction + platelets + serum_sodium, data = cvd_train_df, kernel = 'polynomial', probability = TRUE)
+
+{
+plot(cvd_svm_poly_fit, cvd_train_df, age ~ ejection_fraction)
+plot(cvd_svm_poly_fit, cvd_train_df, age ~ creatinine_phosphokinase)
+plot(cvd_svm_poly_fit, cvd_train_df, age ~ platelets)
+plot(cvd_svm_poly_fit, cvd_train_df, age ~ serum_sodium)
+plot(cvd_svm_poly_fit, cvd_train_df, creatinine_phosphokinase ~ ejection_fraction)
+plot(cvd_svm_poly_fit, cvd_train_df, ejection_fraction ~ serum_sodium)
+}
+```
+
+```{r}
+death_svm_poly_pred = predict(cvd_svm_poly_fit, cvd_test_df)
+
+svm_poly_mx = table(death_svm_poly_pred, cvd_test_df$death)
+svm_poly_mx
+```
+
+```{r}
+metrics_svm_poly = measure.classification(death_svm_poly_pred, cvd_test_df$death, svm_poly_mx)
+rownames(metrics_svm_poly) = "SVM (Polynomial Kernel)"
+
+metric_comparison = rbind(metric_comparison, metrics_svm_poly)
+```
+
+#### SVM (Radial Kernel)
+
+```{r}
+cvd_svm_rad_fit = svm(as.factor(death) ~ age + creatinine_phosphokinase + ejection_fraction + platelets + serum_sodium, data = cvd_train_df, kernel = 'radial', probability = TRUE)
+
+{
+plot(cvd_svm_rad_fit, cvd_train_df, age ~ ejection_fraction)
+plot(cvd_svm_rad_fit, cvd_train_df, age ~ creatinine_phosphokinase)
+plot(cvd_svm_rad_fit, cvd_train_df, age ~ platelets)
+plot(cvd_svm_rad_fit, cvd_train_df, age ~ serum_sodium)
+plot(cvd_svm_rad_fit, cvd_train_df, creatinine_phosphokinase ~ ejection_fraction)
+plot(cvd_svm_rad_fit, cvd_train_df, ejection_fraction ~ serum_sodium)
+}
+```
+
+```{r}
+death_svm_rad_pred = predict(cvd_svm_rad_fit, cvd_test_df)
+
+svm_rad_mx = table(death_svm_rad_pred, cvd_test_df$death)
+svm_rad_mx
+```
+
+```{r}
+metrics_svm_rad = measure.classification(death_svm_rad_pred, cvd_test_df$death, svm_rad_mx)
+rownames(metrics_svm_rad) = "SVM (Radial Kernel)"
+
+metric_comparison = rbind(metric_comparison, metrics_svm_rad)
 ```
 
 #### Decision Tree
