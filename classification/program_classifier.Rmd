@@ -164,7 +164,7 @@ measure.classification <- function(class.pred,prob.class,class.obs,conf.mx){
   #class.obs=class observation
   entropy <- 0 
   for(i in levels(class.pred)){
-  entropy = entropy-sum(log(prob.class[class.obs==i,colnames(prob.class)==i])) }
+    entropy = entropy-sum(log(prob.class[class.obs==i,colnames(prob.class)==i])) }
   avg.accuracy=err.rate=0
   for (i in 1:ncol(conf.mx)){
     avg.accuracy <- avg.accuracy + (conf.mx[i,i]+sum(conf.mx[-i,-i]))/sum(conf.mx)
@@ -186,8 +186,6 @@ measure.classification(class.pred=pre.species,prob.class=prob.species,class.obs=
   
 #cross entropy estimation
 entropy <- 0
-for(i in levels(pre.species)){
-  entropy = entropy-sum(log(prob.species[iris$Species[test.index]==i,colnames(prob.species)==i]))
-}
+
 entropy 
 ```

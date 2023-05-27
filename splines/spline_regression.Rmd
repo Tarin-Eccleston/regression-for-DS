@@ -1,0 +1,46 @@
+---
+title: "Untitled"
+output: html_document
+date: "2023-05-26"
+---
+
+# STATS 762: Spline Regression
+
+### 1) Research question of interest is how cigar consumption relates to prices. Suppose that possible number of knots are 1, ..., 20. Fit reasonable regressions using natural cubic and B splines. 
+
+```{r}
+setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS")
+library(tidyverse)
+library(splines)
+
+cigar_df = as.data.frame(read.csv("data/CigarShort.csv"))
+```
+
+```{r}
+# select state 13 only for this investigation
+cigar_df = cigar_df %>%
+  filter(state == 13)
+
+#possible numbers of knots
+n.knots=c(0:20)
+cv.cigar = matrix(0,length(n.knots),2)
+#index for 10 cv folders
+ind=rep(c(1:10),3);
+
+# max/min prices
+upper = max(cigar_df$price)
+lower = min(cigar_df$price)
+
+
+for(j in 1:length(n.knots)){ for(l in 1:max(ind)){
+  t.ns = predict(lm(sales~ns(price,df=n.knots[j]+1,Boundary.knots=c(lower,upper)),data=cigar_df[ind!=l,]),newdata=cigar_df[ind==l,])
+  t.bs = predict(lm(sales~bs(price,df=n.knots[j]+3,Boundary.knots=c(lower,upper)),data=cigar_df[ind!=l,]),newdata=cigar_df[ind==l,])
+  cv.cigar[j,]=cv.cigar[j,]+c(mean((cigar_df$sales[ind==l]-t.ns)^2),mean((cigar_df$sales[ind==l]-t.bs)^2))
+}} 
+cv.cigar=cv.cigar/l
+{
+par(mfrow=c(1,2)); plot(n.knots,cv.cigar[,1],'o',xlab='number of knots',ylab='10 folder cv error',main='natural splines');
+plot(n.knots,cv.cigar[,2],xlab='number of knots','o',ylab='10 folder cv error',main='B splines')
+}
+```
+

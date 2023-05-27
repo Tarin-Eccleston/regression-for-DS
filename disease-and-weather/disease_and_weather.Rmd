@@ -7,6 +7,30 @@ date: "2023-05-22"
 ## STATS 762: Assignment 4
 ### Author: Tarin Eccleston
 
+### Appendix
+#### Evaluation Function: Computes classification performance estimates (-entropy-, avg accuracy, error rate, precision, recall, F1-score). 
+
+NOTE: Remove entropy
+
+```{r}
+measure.classification = function(class.pred, class.obs, conf.mx){
+  entropy = 0 
+ # for(i in levels(class.pred)){
+  #  entropy = entropy-sum(log(prob.class[class.obs==i,colnames(prob.class)==i])) }
+  avg.accuracy=err.rate=0
+  for (i in 1:ncol(conf.mx)){
+    avg.accuracy = avg.accuracy + (conf.mx[i,i]+sum(conf.mx[-i,-i]))/sum(conf.mx)
+  err.rate = err.rate + (sum(conf.mx[i,-i])+sum(conf.mx[-i,i]))/sum(conf.mx)
+  }
+  avg.accuracy=avg.accuracy/i
+  err.rate=err.rate/i
+  precision = mean(diag(conf.mx)/rowSums(conf.mx))
+  recall = mean(diag(conf.mx)/colSums(conf.mx))
+  F1.score = 2*precision*recall/(precision+recall)
+  return(data.frame(avg.accuracy=avg.accuracy,err.rate=err.rate,precision=precision,recall=recall,F1.score=F1.score))
+}
+```
+
 #### Cardiovascular diseases (CVDs) are one of major causes of death glob-
 ally. About 17.9 million lives die each year and this is about 31% of all
 deaths worldwide. Heart failure is a common event caused by CVDs and
@@ -16,8 +40,11 @@ mortality by heart failure.
 ```{r}
 setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS/disease-and-weather/")
 library(rpart)
+library(rpart.plot)
 library(randomForest)
 library(tidyverse)
+library(MASS) 
+library(klaR)
 ```
 
 #### 1a) Which explanatory variables are nominal? Which explanatory vari-
@@ -39,14 +66,199 @@ cvd_df$diabetes = as.factor(cvd_df$diabetes)
 cvd_df$high_blood_pressure = as.factor(cvd_df$high_blood_pressure)
 cvd_df$sex = as.factor(cvd_df$sex)
 cvd_df$smoking = as.factor(cvd_df$smoking)
-cvd_df$death = as.factor(cvd_df$death)
 ```
 
 #### 1b) Fit an appropriate regression model using all explanatory variables.
 Write the reason for your model choice. 
 
 ```{r}
+# use 80/20 train/test split for an unbiased estimate
+index = sample(nrow(cvd_df), as.integer(nrow(cvd_df)*0.8), replace = FALSE)
+cvd_train_df = cvd_df[index, ]
+cvd_test_df = cvd_df[-index, ]
+
+# fit model
+cvd_log_fit = glm(death ~ ., data = cvd_train_df, family = 'binomial')
+```
+
+##### Logistic Regression
+
+```{r}
+death_probs = data.frame(probs = predict(cvd_log_fit, cvd_test_df, type="response"))
+death_pred = ifelse(death_probs > 0.5, 1, 0)
+
+conf_mx = table(death_pred, cvd_test_df$death)
+conf_mx
+```
+
+```{r}
+metric_comparison = data.frame()
+# metrics_logistic = measure.classification(death_pred, death_probs, cvd_test_df$death, conf_mx)
+metrics_logistic = measure.classification(death_pred, cvd_test_df$death, conf_mx)
+rownames(metrics_logistic) = "Logistic Regression"
+
+metric_comparison = rbind(metric_comparison, metrics_logistic)
+```
+
+Fit logistic regression first as this is the simplest classification model and can be used as a benchmark. We are predicting the likelihood of death (0 or 1) given all other explanatory variables. Probabilities above 0.5 result in death, otherwise anything below 0.5 will result in living.
+
+#### Decision Tree
+
+```{r}
+cvd_dt_fit <- rpart(death ~ ., data = cvd_train_df, method = "class")
+death_pred = predict(cvd_dt_fit, cvd_test_df, type="class")
+
+conf_mx = table(death_pred, cvd_test_df$death)
+conf_mx
+```
+
+```{r}
+metrics_logistic = measure.classification(death_pred, cvd_test_df$death, conf_mx)
+rownames(metrics_logistic) = "Logistic Regression"
+
+metric_comparison = rbind(metric_comparison, metrics_logistic)
+```
+
+Decision Tree performs roughly the same - slightly worse on the positive class (death) and slightly better the negative class (not death). This could be due to use discretion of the decision space, which could result in a loss of information from other variables.
+
+#### 1c) In your final model in (b), which variables are useful in predicting
+death due to heart failure? List the most important two variables
+
+```{r}
+summary(cvd_log_fit)
+```
+
+Age and ejection fraction appear to have the smallest p-values in the summary table, they appear to be the two most useful variables to predict death due to heart failure. However we cannot rely on this statistic alone, so we use variable important from the decision tree.
+
+```{r}
+dt_important = data.frame(importance = cvd_dt_fit$variable.importance)
+ranking = dt_important %>% 
+  tibble::rownames_to_column() %>% 
+  dplyr::rename("variable" = rowname) %>% 
+  dplyr::arrange(importance) %>%
+  dplyr::mutate(variable = forcats::fct_inorder(variable))
+ggplot2::ggplot(ranking) +
+  geom_col(aes(x = variable, y = importance),
+           col = "black", show.legend = F) +
+  coord_flip() +
+  scale_fill_grey() +
+  theme_bw()
+```
+
+A decision tree works by selection the variable and decision boundary would would provide the greater information gain in separating classes death (1) and not death (0). Variables of higher importance are use for splits higher up on the decision tree. Looking at the variable importance graph, we can confirm that ejection fraction and age are the two most important variables to predict death caused by cvd.
+
+#### 1d) We have learnt various classification methods and, some classifiers are
+only applicable to numeric explanatory variables. If we consider only
+numeric explanatory variables, do we get a better classifer? Compare
+classifiers using the same validation method in (b) and answer the
+question
+
+Use now only age, creatinine_phosphokinase, ejection_fraction, platelets, serum_sodium in our model.
+
+We can now use LDA, QDA and SVM on-top of decision trees, random forests and boosting methods. Let's compare their relative performances and decide which ones perform the best.
+
+#### LDA
+```{r}
+cvd_lda_fit = lda(death ~ age + creatinine_phosphokinase + ejection_fraction + platelets + serum_sodium, cvd_train_df)
+
+# prior probabilities
+cvd_lda_fit$prior
+```
+
+```{r}
+# group specific mean
+cvd_lda_fit$means
+```
+
+```{r}
+# plot boundaries
+partimat(as.factor(death) ~ age + creatinine_phosphokinase + ejection_fraction + platelets + serum_sodium, data = cvd_train_df, method = "lda")
+```
+
+```{r}
+#prediction 
+death_lda_pred = predict(cvd_lda_fit, cvd_test_df)
+death_lda_pred = as.data.frame(death_lda_pred)
+
+#confusion matrix
+lda_mx <- table(death_lda_pred$class, cvd_test_df$death)
+lda_mx
+```
+NOTE: We use posterior 1???
+
+```{r}
+# metrics_lda = measure.classification(death_lda_pred$class, death_lda_pred$posterior.1, cvd_test_df$death, lda_mx)
+metrics_lda = measure.classification(death_lda_pred$class, cvd_test_df$death, lda_mx)
+rownames(metrics_lda) = "LDA"
+
+metric_comparison = rbind(metric_comparison, metrics_lda)
+```
+
+#### QDA
+
+```{r}
+cvd_qda_fit = qda(death ~ age + creatinine_phosphokinase + ejection_fraction + platelets + serum_sodium, cvd_train_df)
+
+# prior probabilities
+cvd_qda_fit$prior
+```
+
+```{r}
+# group specific mean
+cvd_qda_fit$means
+```
+
+```{r}
+# plot boundaries
+partimat(as.factor(death) ~ age + creatinine_phosphokinase + ejection_fraction + platelets + serum_sodium, data = cvd_train_df, method = "qda")
+```
+
+```{r}
+#prediction 
+death_qda_pred = predict(cvd_qda_fit, cvd_test_df)
+death_qda_pred = as.data.frame(death_qda_pred)
+
+#confusion matrix
+qda_mx <- table(death_qda_pred$class, cvd_test_df$death)
+qda_mx
+```
+NOTE: We use posterior 1???
+
+```{r}
+# metrics_qda = measure.classification(death_qda_pred$class, death_qda_pred$posterior.1, cvd_test_df$death, qda_mx)
+metrics_qda = measure.classification(death_qda_pred$class, cvd_test_df$death, qda_mx)
+rownames(metrics_qda) = "QDA"
+
+metric_comparison = rbind(metric_comparison, metrics_qda)
+```
+
+#### SVM
+```{r}
+iris.svm1 <- svm(as.factor(death) ~ age + creatinine_phosphokinase + ejection_fraction + platelets + serum_sodium, data = cvd_train_df, kernel = 'linear', probability = TRUE)
+plot(iris.svm1, iris[-test.index,], Petal.Width ~ Petal.Length, slice = list(Sepal.Width = 3, Sepal.Length = 4))
+```
+
+#### Decision Tree
+```{r}
 
 ```
+
+#### Random Forest
+```{r}
+
+```
+
+#### Boosting
+```{r}
+
+```
+
+#### Comparisons
+```{r}
+
+```
+
+WRITE DISCUSSION HERE
+
 
 
