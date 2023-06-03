@@ -42,10 +42,16 @@ setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS/disea
 library(rpart)
 library(rpart.plot)
 library(randomForest)
+
 library(tidyverse)
+
 library(MASS) 
 library(klaR)
 library(e1071)
+
+library(lubridate)
+
+library(splines)
 ```
 
 #### 1a) Which explanatory variables are nominal? Which explanatory vari-
@@ -71,6 +77,15 @@ cvd_df$smoking = as.factor(cvd_df$smoking)
 
 #### 1b) Fit an appropriate regression model using all explanatory variables.
 Write the reason for your model choice. 
+
+NOTE: Make response a factor yikes
+NOTE: Make sure to do cross-validation with norm
+NOTE: b) is a lot more rigorous, find best classifier
+NOTE: d) find best classifier
+NOTE: Compare the best between b and d
+NOTE: find possibly 2-3 metrix, accuracy anf f1 score is good
+NOTE: Make stronger comparison between d and b
+NOTE: Maybe use age and ejection fraction one the best model in d and then compare
 
 ```{r}
 # use 80/20 train/test split for an unbiased estimate
@@ -373,7 +388,84 @@ metric_comparison = rbind(metric_comparison, metrics_svm_rad)
 
 ```
 
-WRITE DISCUSSION HERE
+!!! WRITE DISCUSSION HERE !!!
 
+#### The spreadsheet AckTemp.csv contain daily maximum temperature in
+Auckland from 1 Jan 2014 to 30 June 2020. The attributes follow;
+
+##### Feature Description
+
+year; 2014, ..., 2020
+month; 1,2,...,12
+day; 1,2,...
+maxT; (Maximum daily temperature in Celsius) 3, 6.7, 4.8 ... 6.7
+
+#### Key objects of daily maximum temperature series are estimated naively
+and are presented graphically. We use this as prestudy to model the long
+term behaviour of daily max temperature.
+
+#### From the prestudy (above figure), both seasonality and non-linear trend
+are observed. We will treat month as a factor variable and assume fixed
+month effect.
+
+#### year and day are not sufficient to parametrize the long-term trend and,
+we will introduce the new variable y which it is a vector of cumulative
+days from 1 Jan 2014. For example, y=1 on 1 Jan 2014, ..., y=31 on 31
+Jan 2014, ..., y=2283 on 30 June 2020.
+
+#### 2a) Create the new data in which there are the three variables, y, month
+and maxT
+
+```{r}
+akl_weather_df = read_csv("data/AckTemp.csv")
+glimpse(akl_weather_df)
+```
+```{r}
+akl_weather_df$datetime <- ymd(paste(akl_weather_df$year, akl_weather_df$month, akl_weather_df$day, sep = "-"))
+reference_datetime <- ymd("2014-01-01")
+
+akl_weather_df = akl_weather_df %>%
+  mutate(y = as.numeric(difftime(akl_weather_df$datetime, reference_datetime, units = "days")) + 1)
+
+akl_weather_df = akl_weather_df[,c("y", "month", "maxT")]
+akl_weather_df$month = as.factor(akl_weather_df$month)
+
+glimpse(akl_weather_df)
+```
+
+#### 2b) Find an appropriate non-parametric model for daily maximum tem-
+perature using the data in (a). Write reason(s) for your choice of
+model and degrees of freedom.
+
+```{r}
+plot(maxT ~ y, data = akl_weather_df, xlab = "Days Since 1-1-2014 (Days)", ylab = "Maximum Temperature (C)", main = "Maximum Temperatures in Auckland (1-1-2014 - 30-6-2020)")
+```
+
+There is seasonality and trend on inspection. The seasonality is based on seasons in New Zealand, so we would expect a cycle period of 365 days (1 year).
+
+NOTE: Use CV
+NOTE: create MSE plot
+Maybe choose parsim model?
+
+```{r}
+temp_mse_ns = rep(0,6)
+v=c(1,2,4,8,14,32); 
+
+par(mfrow=c(2,3))
+
+for(j in 1:10){
+  #find basis functions for natural splines
+  n_time = ns(akl_weather_df$y, df=v[j])
+  
+  #predict the temperature given a time
+  pre_temp = predict(lm(akl_weather_df$maxT ~ n_time), interval='confidence'); 
+  
+  temp_mse_ns[j] = mean((akl_weather_df$maxT - pre_temp[,1])^2)
+  
+  plot(akl_weather_df$y, akl_weather_df$maxT, main = paste(v[j]-1,"knots"), ylim=c(min(akl_weather_df$maxT) - 2, max(akl_weather_df$maxT) + 2)); 
+  text(10,10,paste("MSE",round(temp_mse_ns[j],digits=4))); lines(akl_weather_df$y, pre_temp[,1],col='red'); 
+  lines(akl_weather_df$y, pre_temp[,2],lty=2,col='red'); lines(akl_weather_df$y, pre_temp[,3],lty=2,col='red')
+}
+```
 
 

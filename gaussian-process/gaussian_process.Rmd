@@ -1,0 +1,56 @@
+---
+title: "Untitled"
+output: html_document
+date: "2023-06-02"
+---
+
+## STATS 762: Gaussian Process
+
+```{r setup, include=FALSE}
+setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS")
+library(tidyverse)
+library(kernlab)
+library(splines)
+
+car_df = read_csv("data/car.csv")
+glimpse(car_df)
+```
+
+### Task 1: Fit a Gaussian process regression.
+
+```{r}
+# remove missing values
+car_df <- na.omit(car_df)
+gauss_car_fit = gausspr(car_df[,-1], as.matrix(car_df$Price), variance.model = TRUE)
+gauss_car_fit
+```
+
+### Task 2: Fit a B-spline regression with degree of 3. We assume the same number of knots for all explanatory variables and only consider 1-10 knots for simplicity.
+
+```{r}
+set.seed(103)
+
+#LOOCV error -vs- number of knots
+n.knots=c(0:10)
+
+price.cv.bs = rep(0,length(n.knots))
+
+for(j in 1:length(n.knots)){ for(l in 1:length(car_df)){
+  #predict prices
+  price.bs = predict(lm(Price ~ bs(HP, df = n.knots[j]+3, intercept=FALSE, Boundary.knots = range(HP)) + 
+                          bs(Wheel.base, df = n.knots[j]+3, intercept=FALSE, Boundary.knots= range(Wheel.base)) +
+                          bs(Disp, df = n.knots[j]+3, intercept=FALSE, Boundary.knots = range(Disp)), data = car_df[-l,]), newdata= car_df[l,])
+  
+  #cumulative sum of error
+  price.cv.bs[j]=price.cv.bs[j]+(car_df$Price[l]-price.bs)^2
+}}
+
+# average cv error
+price.cv.bs = price.cv.bs/length(car_df$Price)
+
+plot(n.knots, log(price.cv.bs), ylab='log(cv error)',xlab='Number of knots', 'o')
+```
+
+3 knots seem best
+
+### Task 3: We have fitted a regression tree for this data in Week 10. Compare the performance of nonparametric model in (a) , spline regression in (b) and your best regression tree in Week 10.  Which one is better? What can we say about the association between price and car specification?
