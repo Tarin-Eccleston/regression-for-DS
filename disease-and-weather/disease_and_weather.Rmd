@@ -1,49 +1,47 @@
 ---
-title: "Untitled"
-output: html_document
-date: "2023-05-22"
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ## STATS 762: Assignment 4
 ### Author: Tarin Eccleston
 
 ### Appendix
-#### Evaluation Function: Computes classification performance estimates (-entropy-, avg accuracy, error rate, precision, recall, F1-score). 
-
-NOTE: Remove entropy
+#### Evaluation Function: Computes classification performance estimates avg accuracy and F1-score 
 
 ```{r}
 measure.classification = function(class.pred, class.obs, conf.mx){
   entropy = 0 
  # for(i in levels(class.pred)){
   #  entropy = entropy-sum(log(prob.class[class.obs==i,colnames(prob.class)==i])) }
-  avg.accuracy=err.rate=0
+  avg.accuracy=0
   for (i in 1:ncol(conf.mx)){
     avg.accuracy = avg.accuracy + (conf.mx[i,i]+sum(conf.mx[-i,-i]))/sum(conf.mx)
-  err.rate = err.rate + (sum(conf.mx[i,-i])+sum(conf.mx[-i,i]))/sum(conf.mx)
   }
   avg.accuracy=avg.accuracy/i
-  err.rate=err.rate/i
   precision = mean(diag(conf.mx)/rowSums(conf.mx))
   recall = mean(diag(conf.mx)/colSums(conf.mx))
   F1.score = 2*precision*recall/(precision+recall)
-  return(data.frame(avg.accuracy=avg.accuracy,err.rate=err.rate,precision=precision,recall=recall,F1.score=F1.score))
+  return(data.frame(avg.accuracy=avg.accuracy,F1.score=F1.score))
 }
 ```
 
-#### Cardiovascular diseases (CVDs) are one of major causes of death glob-
+Cardiovascular diseases (CVDs) are one of major causes of death glob-
 ally. About 17.9 million lives die each year and this is about 31% of all
 deaths worldwide. Heart failure is a common event caused by CVDs and
 the dataset train.csv contains 10 features that can be used to predict
 mortality by heart failure.
 
 ```{r}
+set.seed(995)
 setwd("/Users/tarineccleston/Documents/Masters/STATS 762/regression-for-DS/disease-and-weather/")
 library(rpart)
 library(rpart.plot)
 library(randomForest)
 
 library(tidyverse)
+library(gridExtra)
 
 library(MASS) 
 library(klaR)
@@ -54,7 +52,7 @@ library(lubridate)
 library(splines)
 ```
 
-#### 1a) Which explanatory variables are nominal? Which explanatory vari-
+1a) Which explanatory variables are nominal? Which explanatory vari-
 ables are numeric? Identify them and modify data to read explana-
 tory variables correctly. 
 
@@ -68,6 +66,7 @@ Numeric: age, creatinine_phosphokinase, ejection_fraction, platelets, serum_sodi
 
 ```{r}
 # force to factor
+cvd_df$death = as.factor(cvd_df$death)
 cvd_df$anaemia = as.factor(cvd_df$anaemia)
 cvd_df$diabetes = as.factor(cvd_df$diabetes)
 cvd_df$high_blood_pressure = as.factor(cvd_df$high_blood_pressure)
@@ -75,29 +74,14 @@ cvd_df$sex = as.factor(cvd_df$sex)
 cvd_df$smoking = as.factor(cvd_df$smoking)
 ```
 
-#### 1b) Fit an appropriate regression model using all explanatory variables.
+1b) Fit an appropriate regression model using all explanatory variables.
 Write the reason for your model choice. 
-
-NOTE: Make response a factor yikes
-NOTE: Make sure to do cross-validation with norm
-NOTE: b) is a lot more rigorous, find best classifier
-NOTE: d) find best classifier
-NOTE: Compare the best between b and d
-NOTE: find possibly 2-3 metrix, accuracy anf f1 score is good
-NOTE: Make stronger comparison between d and b
-NOTE: Maybe use age and ejection fraction one the best model in d and then compare
 
 ```{r}
 # use 80/20 train/test split for an unbiased estimate
 index = sample(nrow(cvd_df), as.integer(nrow(cvd_df)*0.8), replace = FALSE)
 cvd_train_df = cvd_df[index, ]
 cvd_test_df = cvd_df[-index, ]
-
-# standardize numeric covariates on test/training sets
-exclude_cols <- c("death", "anaemia", "diabetes", "high_blood_pressure", "sex", "smoking")
-
-cvd_train_df[, -which(names(cvd_train_df) %in% exclude_cols)] <- scale(cvd_train_df[, -which(names(cvd_train_df) %in% exclude_cols)])
-cvd_test_df[, -which(names(cvd_test_df) %in% exclude_cols)] = scale(cvd_test_df[, -which(names(cvd_test_df) %in% exclude_cols)])
 
 # fit model
 cvd_log_fit = glm(death ~ ., data = cvd_train_df, family = 'binomial')
@@ -107,16 +91,16 @@ cvd_log_fit = glm(death ~ ., data = cvd_train_df, family = 'binomial')
 
 ```{r}
 death_probs = data.frame(probs = predict(cvd_log_fit, cvd_test_df, type="response"))
-death_pred = ifelse(death_probs > 0.5, 1, 0)
+death_pred_logistic = ifelse(death_probs > 0.5, 1, 0)
 
-conf_mx = table(death_pred, cvd_test_df$death)
-conf_mx
+conf_mx_logistic = table(death_pred_logistic, cvd_test_df$death)
+conf_mx_logistic
 ```
 
 ```{r}
 metric_comparison = data.frame()
-# metrics_logistic = measure.classification(death_pred, death_probs, cvd_test_df$death, conf_mx)
-metrics_logistic = measure.classification(death_pred, cvd_test_df$death, conf_mx)
+
+metrics_logistic = measure.classification(death_pred_logistic, cvd_test_df$death, conf_mx_logistic)
 rownames(metrics_logistic) = "Logistic Regression"
 
 metric_comparison = rbind(metric_comparison, metrics_logistic)
@@ -127,23 +111,70 @@ Fit logistic regression first as this is the simplest classification model and c
 #### Decision Tree
 
 ```{r}
-cvd_dt_fit <- rpart(death ~ ., data = cvd_train_df, method = "class")
-death_pred = predict(cvd_dt_fit, cvd_test_df, type="class")
+cvd_dt_fit <- rpart(death ~ ., data = cvd_train_df, method = "class", cp=0.001)
+cvd_dt_fit$cptable
+```
 
-conf_mx = table(death_pred, cvd_test_df$death)
-conf_mx
+Tree No. 4 provides the best accuracy with a dip in xerror. Find the parsimonious model by adding the standard error, resulting in tree no. 3 with 2 splits. 
+
+```{r}
+cp.1se= max(cvd_dt_fit$cptable[cvd_dt_fit$cptable[,4]<sum(cvd_dt_fit$cptable[which.min(cvd_dt_fit$cptable[,4]),c(4,5)]),1])
+cp.1se
 ```
 
 ```{r}
-metrics_logistic = measure.classification(death_pred, cvd_test_df$death, conf_mx)
-rownames(metrics_logistic) = "Logistic Regression"
-
-metric_comparison = rbind(metric_comparison, metrics_logistic)
+cvd_dt_prune_fit <-prune(cvd_dt_fit, cp = cp.1se)
+cvd_dt_prune_fit
 ```
 
-Decision Tree performs worse. This could be due to use discretion of the decision space, which could result in a loss of information from other variables.
+```{r}
+death_pred_dt_pruned = predict(cvd_dt_prune_fit, cvd_test_df, type="class")
 
-#### 1c) In your final model in (b), which variables are useful in predicting
+conf_mx_dt_pruned = table(death_pred_dt_pruned, cvd_test_df$death)
+conf_mx_dt_pruned
+```
+
+```{r}
+metrics_dt = measure.classification(death_pred_dt_pruned, cvd_test_df$death, conf_mx_dt_pruned)
+rownames(metrics_dt) = "Decision Tree"
+
+metric_comparison = rbind(metric_comparison, metrics_dt)
+```
+
+Decision Tree performs better. This could be due to creating decision boundaries to seperate between positive and negative class labels.
+
+#### Random Forest
+
+```{r}
+cvd_rf_fit = randomForest(death ~ ., data = cvd_train_df, importance=TRUE)
+plot(cvd_rf_fit)
+
+death_rf_pred = predict(cvd_rf_fit, cvd_test_df, type="class")
+
+conf_mx_rf = table(death_rf_pred, cvd_test_df$death)
+conf_mx_rf
+```
+
+```{r}
+metrics_rf = measure.classification(death_rf_pred, cvd_test_df$death, conf_mx_rf)
+rownames(metrics_rf) = "Random Forest"
+
+metric_comparison = rbind(metric_comparison, metrics_rf)
+```
+
+```{r}
+head(metric_comparison)
+```
+
+I used average accuracy as it is a good approximation of model performance. I believe the F1 score is a good measure of overall performance of a model as it is the harmonic mean of the precision and recall scores. Precision measures how well the model predicts positive instances correctly whereas the recall measures how well the model captures positive instances from the entire dataset. A high recall indicates a low number of false negatives.
+
+Logistic regression performed okay, with an accuracy of 78%. Decision tree performed the best with an accuracy of 80%. This could be due to decision trees ability to capture non-linear relationships between the input variables and the target variable. If the underlying data has complex interactions and non-linear patterns, decision trees can potentially model them more effectively than logistic regression, which assumes a linear relationship between the predictors and the log-odds of the target variable. 
+
+Consequently random forests performed the poorest with an accuracy of 73% and F1 score of 65%. This could be due to the data having two inherently important variables for predicting death due to CVD - ejection fraction and age (1c). When these variables are excluded from the splits for certain random trees, this could result in trees which are overfitted to the noise in the data rather than the underlying relationship between death and ejection fraction and age.
+
+In conclusion, decision trees perform the best out of the three models.
+
+1c) In your final model in (b), which variables are useful in predicting
 death due to heart failure? List the most important two variables
 
 ```{r}
@@ -167,21 +198,27 @@ ggplot2::ggplot(ranking) +
   theme_bw()
 ```
 
-A decision tree works by selection the variable and decision boundary would would provide the greater information gain in separating classes death (1) and not death (0). Variables of higher importance are use for splits higher up on the decision tree. Looking at the variable importance graph, we can confirm that ejection fraction and age are the two most important variables to predict death caused by cvd.
+```{r}
+imp = importance(cvd_rf_fit)
+sort(imp[,1],decreasing=TRUE)
+```
 
-#### 1d) We have learnt various classification methods and, some classifiers are
+A decision tree works by selection the variable and decision boundary would would provide the greater information gain in separating classes death (1) and not death (0). Variables of higher importance are use for splits higher up on the decision tree. Looking at the variable importance graph, we can confirm that ejection fraction and age are the two most important variables to predict death caused by cvd. 
+
+This is the same with random forests, which randomly excludes variables for each random tree. Despite this, ejection fraction and age still appear to be the two most important covariates.
+
+1d) We have learnt various classification methods and, some classifiers are
 only applicable to numeric explanatory variables. If we consider only
 numeric explanatory variables, do we get a better classifer? Compare
 classifiers using the same validation method in (b) and answer the
 question
 
-Use now only age, creatinine_phosphokinase, ejection_fraction, platelets, serum_sodium in our model. We can now use LDA, QDA and SVM on-top of decision trees, random forests and boosting methods. Let's compare their relative performances using the aforementioned evaluation metrics. Let's do an EDA first...
+Use now only age, creatinine_phosphokinase, ejection_fraction, platelets, serum_sodium in our model. We can now use LDA, QDA and SVM and compare performance to logistic regression, decision tree and random forests. Let's compare their relative performances using the aforementioned evaluation metrics. Let's do an EDA first...
 
 #### Exploratory Data Analysis
 
 ```{r}
-# standardise covariates for the whole dataset for the EDA
-cvd_df[, -which(names(cvd_df) %in% exclude_cols)] <- scale(cvd_df[, -which(names(cvd_df) %in% exclude_cols)])
+exclude_cols <- c("death", "anaemia", "diabetes", "high_blood_pressure", "sex", "smoking")
 
 legend_colors = c("red", "blue")
 {
@@ -215,8 +252,6 @@ ggplot(data.frame(Class = class_labels, Frequency = as.vector(class_freq)), aes(
 
 - No notable blobs in the pair plot.
 
-- No distinguishable distribution or clusters between death and surviving classes for all pairs of explanatory variables.
-
 - There appears to be a class imbalance between survived and dead observations, with the survived class having twice more observations.
 
 #### LDA
@@ -242,7 +277,6 @@ lda_mx
 ```
 
 ```{r}
-# metrics_lda = measure.classification(death_lda_pred$class, death_lda_pred$posterior.1, cvd_test_df$death, lda_mx)
 metrics_lda = measure.classification(death_lda_pred$class, cvd_test_df$death, lda_mx)
 rownames(metrics_lda) = "LDA"
 
@@ -267,12 +301,11 @@ death_qda_pred = predict(cvd_qda_fit, cvd_test_df)
 death_qda_pred = as.data.frame(death_qda_pred)
 
 #confusion matrix
-qda_mx <- table(death_qda_pred$class, cvd_test_df$death)
+qda_mx = table(death_qda_pred$class, cvd_test_df$death)
 qda_mx
 ```
 
 ```{r}
-# metrics_qda = measure.classification(death_qda_pred$class, death_qda_pred$posterior.1, cvd_test_df$death, qda_mx)
 metrics_qda = measure.classification(death_qda_pred$class, cvd_test_df$death, qda_mx)
 rownames(metrics_qda) = "QDA"
 
@@ -368,29 +401,18 @@ rownames(metrics_svm_rad) = "SVM (Radial Kernel)"
 metric_comparison = rbind(metric_comparison, metrics_svm_rad)
 ```
 
-#### Decision Tree
-```{r}
-
-```
-
-#### Random Forest
-```{r}
-
-```
-
-#### Boosting
-```{r}
-
-```
-
 #### Comparisons
 ```{r}
-
+head(metric_comparison, 8)
 ```
 
-!!! WRITE DISCUSSION HERE !!!
+LDA performs the best out of the models in d, could be due to a simple distribution between the death and survived class with ejection fraction and age as the axis. More complicated classification models such as QDA performs worse, even though the decision boundary is more flexible, it is more likely to overfit on the training data. This is the same with all types of SVM as they rely on a small amount of support vectors to create the 'best' decision boundary to separate classes in the training data. However there appears to be quite a bit of variation in the data which would explain the overfit of these models to the training data, resulting in poor test accuracy.
 
-#### The spreadsheet AckTemp.csv contain daily maximum temperature in
+Overall LDA performs just as well as decisions trees. Both models are good choices for this problem, however it depends on the purpose of the investigation. Decision trees are non-parametric making them distribution free and more flexible. Whereas LDA is a parametic model which assumes the same covariance matrix between classes. Regardless of this, both models have a high degree of interpretability.
+
+_________________________________________________________________________________________________________________________________________________________________________________________________
+
+The spreadsheet AckTemp.csv contain daily maximum temperature in
 Auckland from 1 Jan 2014 to 30 June 2020. The attributes follow;
 
 ##### Feature Description
@@ -448,24 +470,6 @@ NOTE: create MSE plot
 Maybe choose parsim model?
 
 ```{r}
-temp_mse_ns = rep(0,6)
-v=c(1,2,4,8,14,32); 
-
-par(mfrow=c(2,3))
-
-for(j in 1:10){
-  #find basis functions for natural splines
-  n_time = ns(akl_weather_df$y, df=v[j])
-  
-  #predict the temperature given a time
-  pre_temp = predict(lm(akl_weather_df$maxT ~ n_time), interval='confidence'); 
-  
-  temp_mse_ns[j] = mean((akl_weather_df$maxT - pre_temp[,1])^2)
-  
-  plot(akl_weather_df$y, akl_weather_df$maxT, main = paste(v[j]-1,"knots"), ylim=c(min(akl_weather_df$maxT) - 2, max(akl_weather_df$maxT) + 2)); 
-  text(10,10,paste("MSE",round(temp_mse_ns[j],digits=4))); lines(akl_weather_df$y, pre_temp[,1],col='red'); 
-  lines(akl_weather_df$y, pre_temp[,2],lty=2,col='red'); lines(akl_weather_df$y, pre_temp[,3],lty=2,col='red')
-}
 ```
 
 
